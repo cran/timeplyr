@@ -4,17 +4,18 @@
 \alias{is_whole_number}
 \title{Are all numbers whole numbers?}
 \usage{
-is_whole_number(x, na.rm = TRUE, tol = sqrt(.Machine$double.eps))
+is_whole_number(x, tol = .Machine$double.eps, na.rm = TRUE)
 }
 \arguments{
 \item{x}{A numeric vector.}
 
+\item{tol}{tolerance value. \cr
+The default is \code{.Machine$double.eps}, essentially the lowest possible tolerance.
+A more typical tolerance for double floating point comparisons in other comparisons
+is \code{sqrt(.Machine$double.eps)}.}
+
 \item{na.rm}{Should \code{NA} values be removed before calculation?
 Default is \code{TRUE}.}
-
-\item{tol}{tolerance value such that a whole number satisfies the condition
-\code{abs(round(x) - x) < tol}. \cr
-The default is \code{sqrt(.Machine$double.eps)}.}
 }
 \value{
 A logical vector of length 1.
@@ -25,12 +26,29 @@ Are all numbers whole numbers?
 \details{
 This is a very efficient function that returns \code{FALSE} if any number
 is not a whole-number and \code{TRUE} if all of them are.
+\subsection{Method}{
+
+\code{x} is defined as a whole number vector
+if all numbers satisfy \code{abs(x - round(x)) < tol}.
+}
+
+\subsection{\code{NA} handling}{
+
+\code{NA} values are handled in a custom way. \cr
+If \code{x} is an integer, \code{TRUE} is always returned even if \code{x} has missing values. \cr
+If \code{x} has both missing values and decimal numbers, \code{FALSE} is always returned. \cr
+If \code{x} has missing values, and only whole numbers and \code{na.rm = FALSE}, then
+\code{NA} is returned. \cr
+Basically \code{NA} is only returned if \code{na.rm = FALSE} and
+\code{x} is a double vector of only whole numbers and \code{NA} values.
 
 Inspired by the discussion in this thread:
 \href{https://stackoverflow.com/questions/3476782/check-if-the-number-is-integer/76655734}{check-if-the-number-is-integer}
 }
+}
 \examples{
 library(timeplyr)
+library(dplyr)
 \dontshow{
 .n_dt_threads <- data.table::getDTthreads()
 .n_collapse_threads <- collapse::get_collapse()$nthreads
@@ -49,6 +67,30 @@ x2 <- c(0:10^5, 0.02)
 
 is_whole_number(x1)
 is_whole_number(x2)
+
+# Somewhat more strict than all.equal
+
+all.equal(10^9 + 0.0001, round(10^9 + 0.0001))
+double_equal(10^9 + 0.0001, round(10^9 + 0.0001))
+is_whole_number(10^9 + 0.0001)
+
+# For a vectorised version, use double_equal(x, round(x))
+
+x <- sqrt(1:10)^2
+double_equal(x, round(x))
+double_equal(x, round(x), tol = c(0, 1 * 10^-(0:8)))
+
+# strict zero tolerance
+is_whole_number(1.0000000001, tol = .Machine$double.eps)
+
+# Can safely be used to select whole number variables
+starwars \%>\%
+  select(where(is_whole_number))
+
+# To reduce the size of any data frame one can use the below code
+
+df <- starwars \%>\%
+  mutate(across(where(is_whole_number), as.integer))
 \dontshow{
 data.table::setDTthreads(threads = .n_dt_threads)
 collapse::set_collapse(nthreads = .n_collapse_threads)

@@ -8,7 +8,7 @@
 #' @param data A data frame.
 #' @param time Time variable (\bold{data-masking}). \cr
 #' Can be a `Date`, `POSIXt`, `numeric`, `integer`, `yearmon`, or `yearqtr`.
-#' @param time_by Time unit. \cr
+#' @param time_by_unit Time unit. \cr
 #' Must be one of the following:
 #' * string, specifying either the unit or the number and unit, e.g
 #' `time_by = "days"` or `time_by = "2 weeks"`
@@ -59,41 +59,46 @@
 #' library(dplyr)
 #' library(timeplyr)
 #' library(nycflights13)
+#' library(lubridate)
 #' \dontshow{
 #' .n_dt_threads <- data.table::getDTthreads()
 #' .n_collapse_threads <- collapse::get_collapse()$nthreads
 #' data.table::setDTthreads(threads = 2L)
 #' collapse::set_collapse(nthreads = 1L)
 #' }
+#'
+#' # Basic usage
+#' hourly_flights <- flights %>%
+#'   time_by(time_hour) # Detects time granularity
+#'
+#' hourly_flights
+#' time_by_span(hourly_flights)
+#'
 #' monthly_flights <- flights %>%
 #'   time_by(time_hour, "month")
-#'
-#' monthly_flights
-#'
-#' time_by_span(monthly_flights)
-#'
-#' monthly_flights <- flights %>%
-#'   time_by(time_hour, "month", time_floor = TRUE) %>%
-#'   count()
 #' weekly_flights <- flights %>%
-#'   time_by(time_hour, "week", time_floor = TRUE) %>%
+#'   time_by(time_hour, "week", time_floor = TRUE)
+#'
+#' monthly_flights %>%
 #'   count()
 #'
-#' rolling_weekly_flights <- flights %>%
-#'   time_by(time_hour, "week") %>%
-#'   summarise(n = n(),
-#'             arr_delay = mean(arr_delay, na.rm = TRUE))
+#' weekly_flights %>%
+#'   summarise(n = n(), arr_delay = mean(arr_delay, na.rm = TRUE))
 #'
-#' monthly_flights
-#' weekly_flights
-#' rolling_weekly_flights
+#' # To aggregate multiple variables, use time_aggregate or time_summarisev
+#'
+#'
+#' flights %>%
+#'   select(time_hour) %>%
+#'   mutate(across(everything(), \(x) time_summarisev(x, time_by = dweeks(1)))) %>%
+#'   count(time_hour)
 #' \dontshow{
 #' data.table::setDTthreads(threads = .n_dt_threads)
 #' collapse::set_collapse(nthreads = .n_collapse_threads)
 #'}
 #' @rdname time_by
 #' @export
-time_by <- function(data, time, time_by = NULL,
+time_by <- function(data, time, time_by_unit = NULL,
                     from = NULL, to = NULL,
                     .name = "{.col}",
                     .add = FALSE,
@@ -113,12 +118,13 @@ time_by <- function(data, time, time_by = NULL,
   time_var <- tidy_transform_names(data, !!enquo(time))
   from_var <- tidy_transform_names(data, !!enquo(from))
   to_var <- tidy_transform_names(data, !!enquo(to))
+  check_is_time_or_num(data[[time_var]])
   if (length(time_var) > 0L){
     if (length(time_var) > 1L){
       stop("Please choose one time variable.")
     }
-  time_by <- time_by_get(data[[time_var]], time_by = time_by,
-                         quiet = TRUE)
+    time_by <- time_by_get(data[[time_var]], time_by = time_by_unit,
+                           quiet = TRUE)
   if (time_by_length(time_by) > 1){
     stop("Please supply only one numeric value in time_by")
   }

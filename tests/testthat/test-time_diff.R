@@ -76,22 +76,16 @@ testthat::test_that("time diff", {
   leap2 <- lubridate::dmy("28-02-2021")
   leap3 <- lubridate::dmy("01-03-2021")
   testthat::expect_true(floor(
-    time_diff(leap1, leap2, time_by = "year", as_period = FALSE,
-              time_type = "period")
-  ) == 1)
-  testthat::expect_true(floor(
-    time_diff(leap1, leap2, time_by = "year", as_period = TRUE,
-              time_type = "period")
-  ) == 0)
-  testthat::expect_true(floor(
-    time_diff(leap1, leap3, time_by = "year", as_period = FALSE,
+    time_diff(leap1, leap2, time_by = "year",
               time_type = "period")
   ) == 1)
   testthat::expect_true(
-    floor(
-      time_diff(leap1, leap3, time_by = "year", as_period = TRUE,
-                time_type = "period")
-    ) == 1)
+    age_years(leap1, leap2) == 0
+    )
+  testthat::expect_true(floor(
+    time_diff(leap1, leap3, time_by = lubridate::years(1))
+  ) == 1)
+  testthat::expect_true(age_years(leap1, leap3) == 1)
 
   # Test vectorization
   seq1 <- seq(-10, 10, 2)
@@ -127,4 +121,32 @@ testthat::test_that("time diff", {
                          time_type = "duration")
   }
   testthat::expect_equal(res5, res6)
+})
+
+testthat::test_that("lubridate period multiplication", {
+  x <- months(c(NA, seq(-10, 11, 1), NA))
+  testthat::expect_equal(
+    multiply_single_unit_period_by_number(x, c(Inf, -Inf, NaN, NA, -10:33)),
+    x * c(Inf, -Inf, NaN, NA, -10:33)
+  )
+  testthat::expect_equal(
+    multiply_single_unit_period_by_number(x, integer()),
+    x * integer()
+  )
+  testthat::expect_equal(
+    multiply_single_unit_period_by_number(x, numeric()),
+    x * numeric()
+  )
+  testthat::expect_equal(
+    multiply_single_unit_period_by_number(x, NA),
+    x * NA
+  )
+  testthat::expect_equal(
+    multiply_single_unit_period_by_number(x, Inf),
+    x * Inf
+  )
+  testthat::expect_equal(
+    multiply_single_unit_period_by_number(x, NULL),
+    x * NULL
+  )
 })

@@ -171,6 +171,9 @@ time_interval <- function(from, to){
 }
 time_granularity <- function(x, is_sorted = FALSE, msg = TRUE){
   gcd_diff <- time_diff_gcd(x, is_sorted = is_sorted)
+  if (length(gcd_diff) == 0){
+    gcd_diff <- 1
+  }
   if (is_date(x)){
     granularity <- "day(s)"
     scale <- 1
@@ -204,6 +207,9 @@ time_granularity <- function(x, is_sorted = FALSE, msg = TRUE){
 # A more focused version
 time_granularity2 <- function(x, is_sorted = FALSE){
   gcd_diff <- time_diff_gcd(x, is_sorted = is_sorted)
+  if (length(gcd_diff) == 0){
+    gcd_diff <- 1
+  }
   if (is_date(x)){
     unit <- "days"
     scale <- 1
@@ -367,31 +373,33 @@ guess_seq_type <- function(units){
 convert_common_dates <- function(x){
   if (is_time(x)){
     out <- x
-  } else if (is.character(x) || is.numeric(x)){
-    x2 <- as.character(x)
-    out <- lubridate::ymd(x2, quiet = TRUE)
-    if (sum(is.na(out[!is.na(x2)])) > 0) out <- lubridate::dmy(x2, quiet = TRUE)
-    n_na <- sum(is.na(out[!is.na(x2)]))
-    if (n_na < length(x) && n_na > 0) out <- rep_len(lubridate::NA_Date_, length(x))
+  } else if (is.character(x)){
+    which_na <- collapse::whichNA(x)
+    out <- lubridate::ymd(x, quiet = TRUE)
+    num_na <- num_na(out)
+    if (num_na > length(which_na)){
+      out <- lubridate::dmy(x, quiet = TRUE)
+    }
+    num_na <- num_na(out)
+    if (num_na > length(which_na)){
+      out <- lubridate::Date(length(x))
+    }
   } else {
-    out <- rep_len(lubridate::NA_Date_, length(x))
+    out <- lubridate::Date(length(x))
   }
   out
 }
 # Calculate size of period unit to expand from and to for specified length
 period_by_calc <- function(from, to, length){
   seconds_unit <- period_unit("seconds")
-  recycled_args <- recycle_args(from, to, length)
-  from <- recycled_args[[1L]]
-  to <- recycled_args[[2L]]
-  length <- recycled_args[[3L]]
+  set_recycle_args(from, to, length)
   which_len_1 <- which(length == 1)
   sec_diff <- time_diff(from, to,
                         time_by = list("seconds" = 1),
                         time_type = "period")
   out <- lubridate::seconds_to_period(sec_diff / (length - 1))
   period_info <- collapse::qDF(time_unit_info(out))
-  n_unique_slots <- ncol(period_info) - rowSums(period_info == 0)
+  n_unique_slots <- df_ncol(period_info) - rowSums(period_info == 0)
   which_multi <- which(n_unique_slots > 1)
   out[which_multi] <- seconds_unit(
     lubridate::period_to_seconds(out[which_multi])
@@ -399,7 +407,37 @@ period_by_calc <- function(from, to, length){
   out[which_len_1] <- seconds_unit(0)
   out
 }
-# Unvectorised version
+# More accurate but slower and less efficient
+period_by_calc2 <- function(from, to, length){
+  periods_to_try <- rev(.period_units)
+  n_units <- length(periods_to_try)
+  for (i in seq_len(n_units)){
+    assign(periods_to_try[i], period_unit(periods_to_try[i])(1))
+  }
+  set_recycle_args(from, to, length)
+  out <- matrix(numeric(length(from) * n_units), ncol = n_units)
+  colnames(out) <- periods_to_try
+  out2 <- out
+  for (j in seq_len(n_units)){
+    out2[, j] <- divide_interval_by_period2(from, to, get(periods_to_try[j]))
+  }
+  ok <- apply(out2, 2, function(x) x / (length - 1))
+  attributes(ok) <- attributes(out)
+  which_len_1 <- which(length == 1)
+  if (length(which_len_1) > 0){
+    ok[which_len_1, ] <- 0
+  }
+  remainder <- ok %% 1
+  ok2 <- abs(out2) >= 1 & remainder == 0
+  ok3 <- ok2 == TRUE
+  res <- max.col(ok3, ties.method = "first")
+  res[rowSums(ok3) == 0] <- n_units
+  # Special way of subsetting specific elements from matrix
+  msub <- matrix(c(seq_len(length(from)), res), ncol = 2)
+  out[msub] <- ok[msub]
+  out[, 1:(n_units - 1)][(out[, 1:(n_units - 1)] %% 1) != 0] <- 0
+  do.call(get("period", asNamespace("lubridate")), as.data.frame(out))
+}
 # period_by <- function(from, to, length){
 #   if (length == 1){
 #     lubridate::seconds(0)
@@ -594,9 +632,9 @@ set_time_cast <- function(x, y){
 }
 
 # Safe time concatenation
-time_c <- function(...){
-  vctrs::vec_c(...)
-}
+# time_c <- function(...){
+#   vctrs::vec_c(...)
+# }
 # Faster time_cast
 # numeric > yearqtr > yearmon > date > datetime
 # You can move from left to right but not right to left
@@ -606,6 +644,7 @@ time_cast <- function(x, template){
       x <- as.POSIXct(x, origin = lubridate::origin)
     }
     lubridate::with_tz(x, tzone = lubridate::tz(template))
+    # as.POSIXct(x, tz = lubridate::tz(template), origin = lubridate::origin)
   } else if (inherits(template, "Date") && !inherits(x, "POSIXt")){
     lubridate::as_date(x)
   } else if (inherits(template, "yearmon") &&
@@ -662,7 +701,7 @@ fcut_ind <- function(x, breaks, rightmost.closed = FALSE,
                           all.inside = all.inside)
   # This makes it so that NA is returned for any x where findinterval
   # resorts to 0 and doesn't just remove them
-  setv(breaksi, 0L, NA_integer_, vind1 = FALSE)
+  breaksi[collapse::whichv(breaksi, 0L)] <- NA_integer_
   breaksi
 }
 cut_time2 <- function(x, breaks, rightmost.closed = FALSE, left.open = FALSE){
@@ -782,7 +821,7 @@ as_yearqtr <- function(x){
   }
 }
 is_interval <- function(x){
-  inherits(x, "Interval")
+  isS4(x) && inherits(x, "Interval")
 }
 # time_agg2 <- function(time_seq_data, data, time, g){
 #   by <- dplyr::join_by(!!rlang::sym(g), closest(!!rlang::sym(time) >= !!rlang::sym(time)))
@@ -1343,4 +1382,228 @@ match_time_type <- function(time_type){
 # Turn "days" into "day", etc
 plural_unit_to_single <- function(x){
   substr(x, 1L, nchar(x) -1L)
+}
+
+# Multiplies a single unit period like days(7) or months(2)
+multiply_single_unit_period_by_number <- function(per, num){
+  per_list <- time_by_list(per)
+  per_list <- time_by_list_convert_weeks_to_days(per_list)
+  per_num <- time_by_num(per_list)
+  per_unit <- time_by_unit(per_list)
+  # per_unit <- plural_unit_to_single(per_unit)
+  # if (per_unit == "second"){
+  #   per_unit <- ".Data"
+  # }
+  # recycle <- length(per_num) != length(num)
+  # TEMPORARY infinite replacement
+  num[is.infinite(num)] <- NA_real_
+  per_num <- per_num * num
+  per_length <- length(per_num)
+  per_num[is.nan(per_num)] <- NA_real_
+  other_fill <- numeric(per_length)
+  other_fill[is.na(per_num)] <- NA_real_
+  switch(
+    per_unit,
+    years = {
+      per@year <- per_num
+      # if (recycle){
+       per@month <- other_fill
+       per@day <- other_fill
+       per@hour <- other_fill
+       per@minute <- other_fill
+       per@.Data <- other_fill
+      # }
+    },
+    months = {
+      per@month <- per_num
+      # if (recycle){
+        per@year <- other_fill
+        per@day <- other_fill
+        per@hour <- other_fill
+        per@minute <- other_fill
+        per@.Data <- other_fill
+      # }
+    },
+    days = {
+      per@day <- per_num
+      # if (recycle){
+        per@year <- other_fill
+        per@month <- other_fill
+        per@hour <- other_fill
+        per@minute <- other_fill
+        per@.Data <- other_fill
+      # }
+    },
+    hours = {
+      per@hour <- per_num
+      # if (recycle){
+        per@year <- other_fill
+        per@month <- other_fill
+        per@day <- other_fill
+        per@minute <- other_fill
+        per@.Data <- other_fill
+      # }
+    },
+    minutes = {
+      per@minute <- per_num
+      # if (recycle){
+        per@year <- other_fill
+        per@month <- other_fill
+        per@day <- other_fill
+        per@hour <- other_fill
+        per@.Data <- other_fill
+      # }
+    },
+    seconds = {
+      per@.Data <- per_num
+      # if (recycle){
+        per@year <- other_fill
+        per@month <- other_fill
+        per@day <- other_fill
+        per@hour <- other_fill
+        per@minute <- other_fill
+      # }
+    }
+  )
+  # attr(per, per_unit) <- per_num
+  # slot(per, per_unit) <- per_num
+  per
+  # period_unit(per_unit)(per_num * num)
+}
+
+rep_single_unit_period <- function(per, ...){
+  per_list <- time_by_list(per)
+  per_list <- time_by_list_convert_weeks_to_days(per_list)
+  per_num <- time_by_num(per_list)
+  per_unit <- time_by_unit(per_list)
+  per_num <- rep(per_num, ...)
+  other_fill <- numeric(length(per_num))
+  switch(
+    per_unit,
+    years = {
+      per@year <- per_num
+      per@month <- other_fill
+      per@day <- other_fill
+      per@hour <- other_fill
+      per@minute <- other_fill
+      per@.Data <- other_fill
+    },
+    months = {
+      per@month <- per_num
+      per@year <- other_fill
+      per@day <- other_fill
+      per@hour <- other_fill
+      per@minute <- other_fill
+      per@.Data <- other_fill
+    },
+    days = {
+      per@day <- per_num
+      per@year <- other_fill
+      per@month <- other_fill
+      per@hour <- other_fill
+      per@minute <- other_fill
+      per@.Data <- other_fill
+    },
+    hours = {
+      per@hour <- per_num
+      per@year <- other_fill
+      per@month <- other_fill
+      per@day <- other_fill
+      per@minute <- other_fill
+      per@.Data <- other_fill
+    },
+    minutes = {
+      per@minute <- per_num
+      per@year <- other_fill
+      per@month <- other_fill
+      per@day <- other_fill
+      per@hour <- other_fill
+      per@.Data <- other_fill
+    },
+    seconds = {
+      per@.Data <- per_num
+      per@year <- other_fill
+      per@month <- other_fill
+      per@day <- other_fill
+      per@hour <- other_fill
+      per@minute <- other_fill
+    }
+  )
+  per
+}
+
+### Taken from lubridate ###
+
+# Accepts an estimate ala (interval / duration)
+# Start datetime, end datetime, and period object
+adj_dur_est <- function (est, start, end, per){
+  est <- ceiling(est)
+  up_date <- time_add2(start,
+                       # est * per)
+                       multiply_single_unit_period_by_number(per, est),
+                       time_type = "period")
+  while (length(which <- which(up_date < end))) {
+    est[which] <- est[which] + 1
+    up_date[which] <- time_add2(up_date[which],
+                                # est[which] * per[which])
+                                multiply_single_unit_period_by_number(per[which], est[which]),
+                                time_type = "period")
+  }
+  low_date <- up_date
+  while (length(which <- which(low_date > end))) {
+    est[which] <- est[which] - 1
+    up_date[which] <- low_date[which]
+    low_date[which] <- time_add2(start[which],
+                                 # est[which] * per[which])
+                                 multiply_single_unit_period_by_number(per[which], est[which]),
+                                 time_type = "period")
+  }
+  frac <- strip_attrs(unclass(difftime(end, low_date, units = "secs"))) /
+    strip_attrs(unclass(difftime(up_date, low_date, units = "secs")))
+  frac[low_date == up_date] <- 0
+  est + frac
+}
+# Faster method for interval(start, end) / period() when period
+# is a single unit period which is very common
+divide_interval_by_period2 <- function(start, end, per){
+  if (length(start) == 0 || length(end) == 0 || length(per) == 0) {
+    return(numeric())
+  }
+  estimate <- (time_as_number(as_datetime2(end)) -
+                 time_as_number(as_datetime2(start)) ) / unit_to_seconds(per)
+  max_len <- max(length(start), length(end), length(per))
+  timespans <- recycle_args(start, end, length = max_len)
+  # Here we make sure to use rep method for lubridate periods
+  timespans[[3]] <- rep_single_unit_period(per, length.out = max_len)
+  if (num_na(estimate) == 0) {
+    adj_dur_est(estimate, timespans[[1]], timespans[[2]], timespans[[3]])
+  } else {
+    not_nas <- !is.na(estimate)
+    start2 <- timespans[[1]][not_nas]
+    end2 <- timespans[[2]][not_nas]
+    per2 <- timespans[[3]][not_nas]
+    estimate[not_nas] <- adj_dur_est(estimate[not_nas], start2, end2, per2)
+    estimate
+  }
+}
+time_by_list_convert_weeks_to_days <- function(time_by){
+  out <- time_by
+  if (time_by_unit(out) == "weeks"){
+    out <- list("days" = as.double(time_by_num(out) * 7))
+  }
+  out
+}
+# time_by_as_timechange_period_list <- function(time_by){
+#   time_by <- time_by_list(time_by)
+#   num <- time_by_num(time_by)
+#   unit <- plural_unit_to_single(time_by_unit(time_by))
+#   add_names(list(num), unit)
+# }
+period_to_list <- function(x){
+  list(year = attr(x, "year"),
+       month = attr(x, "month"),
+       day = attr(x, "day"),
+       hour = attr(x, "hour"),
+       minute = attr(x, "minute"),
+       second = x@.Data)
 }

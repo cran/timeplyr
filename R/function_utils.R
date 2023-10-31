@@ -68,7 +68,7 @@ col_select_pos <- function(data, .cols = character()){
   if (is.numeric(.cols)){
     rng_sign <- check_range_sign(.cols)
     if (rng_sign == -1){
-      .cols <- setdiff(nm_seq, abs(.cols))
+      .cols <- nm_seq[match(nm_seq, abs(.cols), 0L) == 0L]
     } else {
       .cols <- .subset(.cols, .cols != 0)
     }
@@ -207,7 +207,7 @@ mutate2 <- function(data, ..., .by = NULL,
       other_vars <- intersect(names(data), quo_text)
       other_vars <- setdiff(other_vars, group_vars)
       out_vars <- intersect(names(data), c(group_vars, other_vars))
-      collapse::fselect(data, out_vars)
+      fselect(data, .cols = out_vars)
     }
   } else {
     dplyr::mutate(data, !!!dots, .keep = .keep,
@@ -304,16 +304,6 @@ gcd <- function(x, y) {
   r <- x %% y
   ifelse(r, gcd(y, r), y)
 }
-# gcd3 <- function(x, y) {
-#   r <- x %% y
-#   out <- y
-#   while(r > 0){
-#     out <- r
-#     x <- y
-#     r <- x %% r
-#   }
-#   out
-# }
 # Original function I wrote using Matthew Lundberg's gcd function above
 # gcd2 <- function(x){
 #   if (!is.numeric(x)){
@@ -332,35 +322,6 @@ lcm <- function(x, y){
 # Exponentially weighted moving average
 # ewma <- function (x, ratio) {
 #   c(stats::filter(x * ratio, 1 - ratio, "recursive", init = x[1]))
-# }
-# Append columns from y to x using a common ID and a sql type join.
-# tbl_append <- function(x, y, id, keep_id = TRUE, y_suffix = ".x",
-#                        side = c("left", "right"), message = TRUE){
-#   side <- match.arg(side)
-#   if (missing(id)){
-#     id <- ".join.index"
-#     x[[".join.index"]] <- seq_len(nrow(x))
-#     y[[".join.index"]] <- seq_len(nrow(y))
-#   }
-#   if (n_unique(x[[id]]) != nrow(x)) stop("id must uniquely and commonly identify rows in x and y")
-#   if (n_unique(y[[id]]) != nrow(y)) stop("id must uniquely and commonly identify rows in x and y")
-#   common_cols <- setdiff(intersect(names(x), names(y)), id)
-#   # Join new variables onto original data
-#   if (side == "left"){
-#     init_names <- names(x)
-#     z <- dplyr::left_join(x, y, by = id, suffix = c("", y_suffix))
-#   } else {
-#     init_names <- names(y)
-#     z <- dplyr::right_join(x, y, by = id, suffix = c(y_suffix, ""))
-#   }
-#   if (!keep_id){
-#     z <- dplyr::select(z, -dplyr::all_of(id))
-#   }
-#   if (message){
-#     new_renamed_cols <- setdiff(names(z), init_names)
-#     message(paste0("New columns added:\n", paste(new_renamed_cols, collapse = ", ")))
-#   }
-#   z
 # }
 
 # This function is for functions like count() where extra groups need
@@ -483,23 +444,34 @@ new_var_nm <- function(data, check = ".group.id"){
 # Recycle arguments
 recycle_args <- function (..., length = NULL, use.names = FALSE){
   dots <- list(...)
-  missing_length <- is.null(length)
-  if (missing_length) {
-    lens <- lengths(dots, use.names = FALSE)
-    recycle_length <- max(lens)
+  # if (length(dots) == 0){
+  #   return(dots)
+  # }
+  out <- dots
+  lens <- collapse::vlengths(out, use.names = FALSE)
+  uniq_lens <- collapse::fnunique(lens)
+  if (is.null(length)) {
+    recycle_length <- collapse::fmax(lens)
   } else {
     recycle_length <- length
   }
-  if (missing_length && collapse::fnunique(lens) == 1L){
-    out <- dots
-  }
-  else {
-    out <- lapply(dots, function(x) rep_len(x, recycle_length))
-  }
+  recycle_length <- recycle_length * (!collapse::anyv(lens, 0L))
+  recycle <- lens != recycle_length
+  out[recycle] <- lapply(out[recycle], function(x) rep_len(x, recycle_length))
   if (use.names){
     names(out) <- dot_nms(...)
   }
   out
+}
+set_recycle_args <- function(..., length = NULL, use.names = TRUE){
+  if (identical(base::parent.frame(n = 1), base::globalenv())){
+    stop("Users cannot use set_recycle_args from the global environment")
+  }
+  recycled_list <- recycle_args(..., length = length, use.names = use.names)
+  out_nms <- names(recycled_list)
+  for (i in seq_along(recycled_list)){
+    assign(out_nms[i], recycled_list[[i]], envir = parent.frame(n = 1))
+  }
 }
 # Row products
 rowProds <- function(x, na.rm = FALSE, dims = 1L){
@@ -515,13 +487,8 @@ radix_sort <- function(x, na.last = TRUE, ...){
   x[radix_order(x, na.last = na.last, ...)]
 }
 # Creates a sequence of ones.
-# This is used primarily for sums
 seq_ones <- function(length){
-  if (is_integerable(length)){
-    collapse::alloc(1L, length)
-  } else {
-    collapse::alloc(1, length)
-  }
+  collapse::alloc(1L, length)
 }
 # Drop leading zeroes
 drop_leading_zeros <- function(x, sep = "."){
@@ -855,7 +822,8 @@ pretty_floor <- function(x){
 pretty_ceiling <- function(x){
   ceiling_nearest_n(x, n = 10^(log10_divisibility(x)))
 }
-fill_with_na <- function(x, n = NULL, prop = NULL){
+
+na_fill <- function(x, n = NULL, prop = NULL){
   if (!is.null(n) && !is.null(prop)){
     stop("either n or prop must be supplied")
   }
@@ -885,71 +853,26 @@ abs_diff <- function(x, y){
 }
 
 # Convenience comparison functions for doubles
-# double_equal_rel <- function(x, y, tol = sqrt(.Machine$double.eps)){
-#   rel_diff(x, y) < tol
+# double_equal <- function(x, y, tol = sqrt(.Machine$double.eps)){
+#   abs(x - y) < tol
 # }
-
-# Convenience comparison functions for doubles
-double_equal <- function(x, y, tol = sqrt(.Machine$double.eps)){
-  abs(x - y) < tol
-}
-double_gt <- function(x, y, tol = sqrt(.Machine$double.eps)){
-  (x - y) > tol
-}
-double_gte <- function(x, y, tol = sqrt(.Machine$double.eps)){
-  (x - y) > -tol
-}
-double_lt <- function(x, y, tol = sqrt(.Machine$double.eps)){
-  (x - y) < -tol
-}
-double_lte <- function(x, y, tol = sqrt(.Machine$double.eps)){
-  (x - y) < tol
-}
+# double_gt <- function(x, y, tol = sqrt(.Machine$double.eps)){
+#   (x - y) > tol
+# }
+# double_gte <- function(x, y, tol = sqrt(.Machine$double.eps)){
+#   (x - y) > -tol
+# }
+# double_lt <- function(x, y, tol = sqrt(.Machine$double.eps)){
+#   (x - y) < -tol
+# }
+# double_lte <- function(x, y, tol = sqrt(.Machine$double.eps)){
+#   (x - y) < tol
+# }
 # `%~==%` <- double_equal
 # `%~>=%` <- double_gte
 # `%~<=%` <- double_lte
 # `%~>%` <- double_gt
 # `%~<%` <- double_lt
-# any_lt <- function(x, value, tol = sqrt(.Machine$double.eps)){
-#   stopifnot(inherits(x, c("integer", "numeric")))
-#   if (is.integer(x)){
-#     any_int_lt(x, value)
-#   } else {
-#     any_num_lt(x, value, tol)
-#   }
-# }
-# any_lte <- function(x, value, tol = sqrt(.Machine$double.eps)){
-#   stopifnot(inherits(x, c("integer", "numeric")))
-#   if (is.integer(x)){
-#     any_int_lte(x, value)
-#   } else {
-#     any_num_lte(x, value, tol)
-#   }
-# }
-# any_gt <- function(x, value, tol = sqrt(.Machine$double.eps)){
-#   stopifnot(inherits(x, c("integer", "numeric")))
-#   if (is.integer(x)){
-#     any_int_gt(x, value)
-#   } else {
-#     any_num_gt(x, value, tol)
-#   }
-# }
-# any_gte <- function(x, value, tol = sqrt(.Machine$double.eps)){
-#   stopifnot(inherits(x, c("integer", "numeric")))
-#   if (is.integer(x)){
-#     any_int_gte(x, value)
-#   } else {
-#     any_num_gte(x, value, tol)
-#   }
-# }
-# any_equal <- function(x, value, tol = sqrt(.Machine$double.eps)){
-#   stopifnot(inherits(x, c("integer", "numeric")))
-#   if (is.integer(x)){
-#     any_int_equal(x, value)
-#   } else {
-#     any_num_equal(x, value, tol)
-#   }
-# }
 # Taken from base R to avoid needing R >= 4
 deparse1 <- function(expr, collapse = " ", width.cutoff = 500L, ...){
   paste(deparse(expr, width.cutoff, ...), collapse = collapse)
@@ -960,32 +883,6 @@ deparse1 <- function(expr, collapse = " ", width.cutoff = 500L, ...){
 fbincode <- function(x, breaks, right = TRUE, include.lowest = FALSE,
                      gx = NULL, gbreaks = NULL){
   x_list <- gsplit2(x, g = gx)
-  # gbreaks <- GRP2(gbreaks)
-  # if (is.null(gbreaks)){
-  #   n_groups <- min(length(breaks), 1L)
-  #   group_sizes <- length(breaks)
-  #   group_ends <- length(breaks)
-  #   group_id <- NULL
-  # } else {
-  #   n_groups <- GRP_n_groups(gbreaks)
-  #   group_sizes <- GRP_group_sizes(gbreaks)
-  #   group_ends <- GRP_ends(gbreaks)
-  #   group_id <- GRP_group_id(gbreaks)
-  # }
-  # if (append_inf){
-  #   appended_indices <- group_ends + cumsum(seq_ones(n_groups))
-  #   new_breaks <- numeric(length(breaks) + n_groups)
-  #   new_breaks[-appended_indices] <- breaks
-  #   new_breaks[appended_indices] <- Inf
-  #   if (!is.null(gbreaks)){
-  #     new_group_id <- integer(length(breaks) + n_groups)
-  #     new_group_id[-appended_indices] <- group_id
-  #     new_group_id[appended_indices] <- group_id[group_ends]
-  #     gbreaks <- group_id_to_qg(new_group_id, n_groups = n_groups,
-  #                               group_sizes = group_sizes)
-  #   }
-  #   breaks <- new_breaks
-  # }
   breaks_list <- gsplit2(breaks, g = gbreaks)
   out <- vector("list", length(x_list))
   for (i in seq_along(out)){
@@ -996,82 +893,48 @@ fbincode <- function(x, breaks, right = TRUE, include.lowest = FALSE,
   }
   unlist(out, recursive = FALSE, use.names = FALSE)
   # Parallel options
-  # out <- foreach(i = seq_along(x_list)) %dopar%
-  #   .bincode(.subset2(x_list, i),
-  #            .subset2(breaks_list, i),
-  #            right = right,
-  #            include.lowest = include.lowest)
   # out <- furrr::future_map2(x_list, breaks_list,
   #                           function(x, y) .bincode(x, y,
   #                                                   right = right,
   #                                                   include.lowest = include.lowest))
 }
+# get_cores <- function(){
+#   out <- floor(parallel::detectCores() / 2)
+#   if (length(out) != 1 || !is.numeric(out) || is.na(out)){
+#     out <- 1
+#   }
+#   as.integer(out)
+# }
+# parallel_bincode <- function(x, breaks, right = TRUE, include.lowest = FALSE,
+#                              gx = NULL, gbreaks = NULL){
+#   n_cores <- get_cores()
+#   cluster <- parallel::makeCluster(n_cores)
+#   doParallel::registerDoParallel(cluster)
+#   x_list <- gsplit2(x, g = gx)
+#   breaks_list <- gsplit2(breaks, g = gbreaks)
+#   out <- foreach::`%dopar%`(foreach::foreach(i = seq_along(x_list)),
+#                             {
+#                               .bincode(.subset2(x_list, i),
+#                                        .subset2(breaks_list, i),
+#                                        right = right,
+#                                        include.lowest = include.lowest)
+#                             })
+#   parallel::stopCluster(cluster)
+#   unlist(out, recursive = FALSE, use.names = FALSE)
+# }
 # Is x numeric and not S4?
 is_s3_numeric <- function(x){
   typeof(x) %in% c("integer", "double") && !isS4(x)
 }
 
-# Much faster and more efficient cut.default
-fast_cut <- function (x, breaks, labels = NULL, include.lowest = FALSE, right = TRUE,
-                  dig.lab = 3L, ordered_result = FALSE, ...){
-  if (!is.numeric(x))
-    stop("'x' must be numeric")
-  if (length(breaks) == 1L) {
-    if (is.na(breaks) || breaks < 2L)
-      stop("invalid number of intervals")
-    nb <- as.integer(breaks + 1)
-    dx <- diff.default(rx <- range(x, na.rm = TRUE))
-    if (dx == 0) {
-      dx <- if (rx[1L] != 0)
-        abs(rx[1L])
-      else 1
-      breaks <- seq.int(rx[1L] - dx/1000, rx[2L] + dx/1000,
-                        length.out = nb)
-    }
-    else {
-      breaks <- seq.int(rx[1L], rx[2L], length.out = nb)
-      breaks[c(1L, nb)] <- c(rx[1L] - dx/1000, rx[2L] +
-                               dx/1000)
-    }
-  }
-  else nb <- length(breaks <- sort.int(as.double(breaks)))
-  if (anyDuplicated(breaks))
-    stop("'breaks' are not unique")
-  codes.only <- FALSE
-  if (is.null(labels)) {
-    for (dig in dig.lab:max(12L, dig.lab)) {
-      ch.br <- formatC(0 + breaks, digits = dig, width = 1L)
-      if (ok <- all(ch.br[-1L] != ch.br[-nb]))
-        break
-    }
-    labels <- if (ok)
-      paste0(if (right)
-        "("
-        else "[", ch.br[-nb], ",", ch.br[-1L], if (right)
-          "]"
-        else ")")
-    else paste0("Range_", seq_len(nb - 1L))
-    if (ok && include.lowest) {
-      if (right)
-        substr(labels[1L], 1L, 1L) <- "["
-      else substring(labels[nb - 1L], nchar(labels[nb -
-                                                     1L], "c")) <- "]"
-    }
-  }
-  else if (is.logical(labels) && !labels)
-    codes.only <- TRUE
-  else if (length(labels) != nb - 1L)
-    stop("number of intervals and length of 'labels' differ")
-  code <- .bincode(x, breaks, right, include.lowest)
-  if (!codes.only) {
-    levels(code) <- as.character(labels)
-    class(code) <- c(if (ordered_result) "ordered" else character(0), "factor")
-  }
-  code
-}
 check_is_num <- function(x){
   if (!is.numeric(x)){
     stop(paste(deparse1(substitute(x)), "must be numeric"))
+  }
+}
+check_is_double <- function(x){
+  if (!is.double(x)){
+    stop(paste(deparse1(substitute(x)), "must be a double"))
   }
 }
 # TRUE when x is sorted and contains no NA
@@ -1106,6 +969,12 @@ strip_attr <- function(x, which){
 is_integerable <- function(x){
   abs(x) <= .Machine$integer.max
 }
+all_integerable <- function(x, shift = 0){
+  all(
+    (abs(collapse::frange(x, na.rm = TRUE)) + shift ) <= .Machine$integer.max,
+    na.rm = TRUE
+  )
+}
 add_attr <- function(x, which, value){
   attr(x, which) <- value
   x
@@ -1118,15 +987,6 @@ add_names <- function(x, value){
   names(x) <- value
   x
 }
-# flip_names_values <- function(x){
-#   x_nms <- names(x)
-#   if (is.null(x_nms)){
-#     stop("x must be a named vector")
-#   }
-#   out <- x_nms
-#   names(out) <- as.character(unname(x))
-#   out
-# }
 # Use data.table matching if both are character, otherwise base R
 fmatch <- function(x, table, nomatch = NA_integer_){
   if (is.character(x) && is.character(table)){
@@ -1169,16 +1029,40 @@ allNA2 <- function(x){
   }
   collapse::allNA(x)
 }
-list_of_empty_vectors <- function(x){
-  lapply(x, function(x) x[0L])
+# Build on top of any and all
+# Are none TRUE?
+none <- function(..., na.rm = FALSE){
+  !any(..., na.rm = na.rm)
+}
+# Are some TRUE? Must specify number or proportion
+some <- function(..., n = NULL, prop = NULL, na.rm = FALSE){
+  if ( ( !is.null(n) && !is.null(prop) ) ||
+       ( is.null(n) && is.null(prop) ) ){
+    stop("either n or prop must be supplied")
+  }
+  dots <- list(...)
+  if (length(dots) == 1L){
+    dots <- dots[[1L]]
+  } else {
+    dots <- unlist(dots)
+  }
+  stopifnot(is.logical(dots))
+  if (na.rm){
+    dots <- dots[!is.na(dots)]
+  }
+  N <- length(dots)
+  num_true <- sum(dots)
+  if (!is.null(n)){
+    out <- num_true >= n
+  }
+  if (!is.null(prop)){
+    out <- (num_true / N) >= prop
+  }
+  out
 }
 
-# Similar to collapse::fnobs
-# The same can be achieved using
-# length(x) - fnobs(x)
-# But num_na has support for complex & raw vectors
-num_na <- function(x){
-  .Call(`_timeplyr_cpp_num_na`, x)
+list_of_empty_vectors <- function(x){
+  lapply(x, function(x) x[0L])
 }
 # anyDuplicated but returns a logical(1)
 anyduplicated <- function(x){
@@ -1197,9 +1081,57 @@ hasTsp <- function(x){
 tsp <- function(x){
   attr(x, "tsp")
 }
-# set_collapse_threads <- function(nthreads = 1L){
-#   set_collapse <- try(get("set_collapse", asNamespace("collapse")))
-#   if (exists("setDTthreads", inherits = FALSE)){
-#     set_collapse(nthreads = nthreads)
+# Simple wrapper around collapse::join
+collapse_join <- function(x, y, on, how, sort = FALSE, ...){
+  fselect(
+    collapse::join(x, y,
+                   on = on, sort = sort, how = how,
+                   verbose = FALSE,
+                   keep.col.order = FALSE,
+                   drop.dup.cols = FALSE,
+                   overid = 2,
+                   ...),
+    .cols = c(names(x), setdiff(names(y), names(x)))
+  )
+}
+# Use this as an automated tolerance estimate when dealing with small numbers
+# Doesn't handle small differences between large numbers though.
+# Experimental
+# get_tolerance <- function(x){
+#   min_tol <- .Machine$double.eps
+#   max_tol <- sqrt(min_tol)
+#   xmin <- collapse::fmin(abs(x[x != 0]))
+#   tol_est <- 10^(-ceiling(abs(log10(xmin))))
+#   max(tol_est, min_tol)
+#   min(max(tol_est, min_tol), max_tol)
+# }
+# rng_used <- function(expr){
+#   curr <- globalenv()$.Random.seed
+#   on.exit({print(paste("RNG USED:", !identical(curr, .Random.seed)))})
+#   invisible(eval(expr, envir = parent.frame(n = 1)))
+# }
+
+# The idea for the future is to use this instead of tidy_transform_names()
+# Ideally safer for functions with side effects and other functions
+# That may error when presented with vectors of length 1.
+# mutate_summary <- function(.data, ..., .by = NULL,
+#                            .keep = c("all", "used", "unused", "none"),
+#                            .before = NULL,
+#                            .after = NULL){
+#   original_names <- names(.data)
+#   for (i in seq_along(.data)){
+#     attr(.data[[i]], ".old_name") <- original_names[i]
+#   }
+#   out <- mutate2(.data, ..., .by = {{ .by }},
+#                  .keep = .keep,
+#                  .before = !!rlang::enquo(.before),
+#                  .after = !!rlang::enquo(.after))
+#   has_old_name_attr <- function(x) !is.null(attr(x, ".old_name"))
+#   used <- logical(length(out))
+#   new <- logical(length(out))
+#   for (i in seq_along(out)){
+#     new[i] <- !has_old_name_attr(out[[i]])
+#     used[i] <- !new[i] && attr(.data[[i]])
 #   }
 # }
+

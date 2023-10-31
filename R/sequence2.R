@@ -1,7 +1,7 @@
 #' Extension to `base::sequence()`
 #'
 #' @description
-#' Like `sequence()` but it accepts decimal increments.
+#' Like [sequence()] but it accepts decimal increments.
 #'
 #' @param nvec Vector of sequence lengths.
 #' @param from Start of sequence(s).
@@ -13,11 +13,14 @@
 #' `seq_v` returns a vector of size `sum((to - from) / (by + 1))`
 #'
 #' @details
-#' `sequence2()` works in the same as `sequence()` but can accept
-#' non-whole number `by` values.
-#' It also doesn't recycle `from` and `to`, in the same as `sequence()`. \cr
-#' If any of the sequences contain integers > .Machine$integer.max,
+#' `sequence2()` works in the same way as `sequence()` but can accept
+#' non-integer `by` values.
+#' It also recycles `from` and `to`, in the same way as `sequence()`. \cr
+#' If any of the sequences contain values > .Machine$integer.max,
 #' then the result will always be a double vector.
+#'
+#' `from` can be also be a date, date-time, or any object that supports
+#' addition and multiplication.
 #'
 #' `seq_v()` is a vectorised version of `seq()` that strictly accepts
 #' only the arguments `from`, `to` and `by`. \cr
@@ -47,45 +50,43 @@
 #' @rdname sequence2
 #' @export
 sequence2 <- function(nvec, from = 1L, by = 1L){
-  out_maybe_int <- all(is_integerable(
-    collapse::frange(
-      time_as_number(from) + (by * (pmax(nvec - 1, 0))),
-      na.rm = TRUE
-    )
-  ))
-  out_len <- sum(nvec)
-  out_is_long <- out_len >= (2^31)
-  out_is_int <- is.integer(from) &&
-    is.integer(by) &&
-    out_maybe_int
-
-  if (out_is_int && !out_is_long){
+  # Sequence end values
+  # If these cant be integers, then we need to work with doubles
+  seq_ends <- time_as_number(from) + (by * (pmax.int(nvec - 1, 0)))
+  out_maybe_int <- all_integerable(seq_ends)
+  # If from/by are integers and all sequence values < 2^31 then use sequence
+  out_is_int <- is.integer(from) && is.integer(by) && out_maybe_int
+  if (out_is_int){
     return(sequence(nvec = nvec, from = from, by = by))
   }
-  g_len <- length(nvec)
-  if (length(from) > 1L){
-    # Recycle
-    from <- rep_len(from, g_len)
-    # Expand
-    from <- rep.int(from, times = nvec)
-  }
-  if (length(by) > 1L){
-    # Recycle
-    by <- rep_len(by, g_len)
-    # Expand
-    by <- rep.int(by, times = nvec)
-  }
-  # Arithmetic
-  if (!out_is_long){
-    g_add <- sequence(nvec, from = 0L, by = 1L)
+  if (is.object(from)){
+    g_len <- length(nvec)
+    if (length(from) > 1L){
+      # Recycle
+      from <- rep_len(from, g_len)
+      # Expand
+      from <- rep(from, times = nvec)
+    }
+    if (length(by) > 1L){
+      # Recycle
+      by <- rep_len(by, g_len)
+      # Expand
+      by <- rep(by, times = nvec)
+    }
+    # Arithmetic
+    g_add <- double_sequence(nvec, from = 0, by = 1)
+    from + (g_add * by)
   } else {
-    g <- seq_id(nvec)
-    g_add <- collapse::fcumsum(seq_ones(out_len),
-                               check.o = FALSE,
-                               na.rm = FALSE,
-                               g = g) - 1
+    double_sequence(nvec, from = from, by = by)
   }
-  from + (g_add * by)
+}
+# Like base::sequence() but c++
+# integer_sequence <- function(size, from = 1L, by = 1L){
+#   cpp_int_sequence(as.integer(size), as.integer(from), as.integer(by))
+# }
+# Like base::sequence() but with support for double increments and long vectors
+double_sequence <- function(size, from = 1, by = 1){
+  cpp_dbl_sequence(as.integer(size), as.double(from), as.double(by))
 }
 #' @rdname sequence2
 #' @export
@@ -95,15 +96,23 @@ seq_id <- function(nvec){
 #' @rdname sequence2
 #' @export
 seq_v <- function(from = 1L, to = 1L, by = 1L){
-  sequence2( ( (to - from) / by) + 1L, from = from, by = by)
+  out_size <- seq_size(from = from, to = to, by = by)
+  sequence2(out_size, from = from, by = by)
 }
 seq_size <- function(from, to, by = 1L){
-  out <- abs(( (to - from) / by ))
-  out[by == 0 & from == to] <- 0
-  as.integer(out) + 1L
+  time_seq_sizes(from = from, to = to, time_by = by)
+  # out <- abs(( (to - from) / by ))
+  # out[from == to] <- 0
+  #
+  # if (isTRUE(all_integerable(out, shift = 1))){
+  #   as.integer(out + 1e-10) + 1L
+  # } else {
+  #   trunc(out + 1e-10) + 1L
+  # }
 }
-# Low-level vectorised seq (only integers)
-seqv.int <- function(from = 1L, to = 1L, by = 1L){
-  sequence( ( (to - from) / by) + 1L, from = from, by = by)
+seq_tbl <- function(from = 1L, to = 1L, by = 1L){
+  size <- seq_size(from = from, to = to, by = by)
+  seq_out <- sequence2(size, from = from, by = by)
+  seq_id <- seq_id(size)
+  new_tbl(id = seq_id, x = seq_out)
 }
-

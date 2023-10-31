@@ -123,19 +123,19 @@ fexpand <- function(data, ..., expand_type = c("crossing", "nesting"),
       (length(group_vars) > 0L &&
        length(leftover_grp_nms) <= 1L &&
        expand_type == "crossing")){
-    out <- nested_join(summarise_vars, N = nrow2(data),
+    out <- nested_join(summarise_vars, N = df_nrow(data),
                        sort = sort,
                        log_limit = log_limit)
   } else {
     # Method for grouped data which performs a separate cross-join of
     # non-grouped variables for each group
     if (length(group_vars) > 0L && length(leftover_grp_nms) >= 2L){
-      out1 <- nested_join(summarise_vars, N = nrow2(data),
+      out1 <- nested_join(summarise_vars, N = df_nrow(data),
                           sort = FALSE,
                           log_limit = log_limit)
       # Add group ID
       grp_nm <- new_var_nm(out1, ".group.id")
-      out1[, (grp_nm) := group_id.default(.SD, order = FALSE),
+      out1[, (grp_nm) := group_id(.SD, order = FALSE, .cols = names(.SD)),
            .SDcols = group_vars]
       setorderv2(out1, cols = grp_nm)
       # Add group IDs for each non-group variable
@@ -143,7 +143,7 @@ fexpand <- function(data, ..., expand_type = c("crossing", "nesting"),
       for (i in seq_along(leftover_grp_nms)){
         assign(paste0("grp_nm_", i),
                new_var_nm(out1, ".group.id"))
-        out1[, (get(paste0("grp_nm_", i))) := group_id.default(.SD, order = FALSE),
+        out1[, (get(paste0("grp_nm_", i))) := group_id(.SD, order = FALSE, .cols = names(.SD)),
              .SDcols = leftover_grp_nms[[i]]]
       }
       group_id_nms <- unlist(mget(paste0("grp_nm_",
@@ -165,19 +165,27 @@ fexpand <- function(data, ..., expand_type = c("crossing", "nesting"),
       # out <- out2[, .Call(Ccj, unlist(.SD, recursive = FALSE, use.names = FALSE)),
       #             keyby = grp_nm,
       #             .SDcols = group_id_nms]
-        out <- out2[, CJ2(unlist(.SD, recursive = FALSE, use.names = FALSE)),
-                    keyby = grp_nm,
-                    .SDcols = group_id_nms]
+      out <- out2[, CJ2(unlist(.SD, recursive = FALSE, use.names = FALSE)),
+                  keyby = grp_nm,
+                  .SDcols = group_id_nms]
       out <- frename(out, .cols = add_names(names(out), c(grp_nm, leftover_grp_nms)))
       for (i in seq_along(group_id_nms)){
-        data.table::set(out, j = leftover_grp_nms[[i]],
-                        value = out1[[leftover_grp_nms[[i]]]][match(out[[leftover_grp_nms[[i]]]],
-                                                                    out1[[group_id_nms[[i]]]])])
+        grp_to_modify <- leftover_grp_nms[[i]]
+        grp_to_match_on <- group_id_nms[[i]]
+        data.table::set(out, j = grp_to_modify,
+                        value = out1[[grp_to_modify]][
+                          collapse::fmatch(out[[grp_to_modify]],
+                                           out1[[grp_to_match_on]],
+                                           overid = 2L)
+                        ])
       }
       for (i in seq_along(group_vars)){
         data.table::set(out, j = group_vars[[i]],
-                        value = out1[[group_vars[[i]]]][match(out[[grp_nm]],
-                                                              out1[[grp_nm]])])
+                        value = out1[[group_vars[[i]]]][
+                          collapse::fmatch(out[[grp_nm]],
+                                           out1[[grp_nm]],
+                                           overid = 2L)
+                        ])
       }
       set_rm_cols(out, grp_nm)
       if (sort){
@@ -215,10 +223,10 @@ nested_join <- function(X, sort = FALSE, log_limit = 8, N){
   # Newly created variables
   other_nms <- X_nms[!X_nms %in% data_nms]
   df <- data.table::as.data.table(X[X_nms %in% data_nms])
-  n_data <- nrow2(df)
+  n_data <- df_nrow(df)
   if (n_data > 0L){
     df <- collapse::funique(df)
-    n_data <- nrow2(df)
+    n_data <- df_nrow(df)
   }
   X_other <- X[X_nms %in% other_nms]
   X_other <- lapply(X_other, function(x) collapse::funique(x, sort = FALSE))
@@ -229,13 +237,12 @@ nested_join <- function(X, sort = FALSE, log_limit = 8, N){
   expand_check(expanded_n, log_limit)
   # Nested cross-join
   grp_seq <- seq_len(n_data)
-  if (nrow2(df) == 0L){
+  if (df_nrow(df) == 0L){
     out <- crossed_join(X_other, unique = FALSE)
   } else {
     out <- df_row_slice(df, rep(grp_seq, each = n_other))
-    # out <- df[rep(grp_seq, each = n_other), , drop = FALSE]
     if (length(X_other) > 0L){
-      rep_times <- nrow2(out) / collapse::vlengths(X_other, use.names = FALSE)
+      rep_times <- df_nrow(out) / collapse::vlengths(X_other, use.names = FALSE)
       for (i in seq_along(X_other)){
         data.table::set(out, j = other_nms[i],
                         value = rep(X_other[[i]], rep_times[i]))
@@ -264,10 +271,14 @@ fcomplete <- function(data, ..., expand_type = c("crossing", "nesting"),
   out <- as_DT(data)
   fill_na <- any(!is.na(fill))
   # Full-join
-  if (nrow2(expanded_df) > 0 && ncol(expanded_df) > 0){
+  if (df_nrow(expanded_df) > 0 && df_ncol(expanded_df) > 0){
     out <- dplyr::full_join(out, expanded_df, by = names(expanded_df))
+    # out <- collapse_join(out, expanded_df,
+    #                      on = names(expanded_df),
+    #                      how = "full",
+    #                      sort = sort)
     if (sort){
-      setorderv2(out, cols = names(expanded_df))
+      out <- farrange(out, .cols = names(expanded_df))
     }
   }
   # Replace NA with fill
@@ -283,7 +294,7 @@ fcomplete <- function(data, ..., expand_type = c("crossing", "nesting"),
   out_order <- c(names(data),
                  setdiff(names(out),
                          names(data)))
-  data.table::setcolorder(out, neworder = out_order)
+  out <- fselect(out, .cols = out_order)
   if (keep_class){
     out <- df_reconstruct(out, data)
   }

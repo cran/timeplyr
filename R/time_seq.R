@@ -52,9 +52,6 @@
 #' Options are "preday", "boundary", "postday", "full" and "NA".
 #' See `?timechange::time_add` for more details.
 #' @param roll_dst See `?timechange::time_add` for the full list of details.
-#' @param as_period Logical. Should time interval be coerced to a period
-#' before time difference is calculated? This is useful for calculating
-#' for example age in exact years or months.
 #' @param sizes Time sequence sizes.
 #'
 #' @returns
@@ -153,10 +150,10 @@ time_seq <- function(from, to, time_by, length.out = NULL,
     warning("from, to, time_by and length.out have all been specified,
             the result may be unpredictable.")
   }
-  if (!missing_from) if (length(from) > 1L) stop("from must be of length 1")
-  if (!missing_to) if (length(to) > 1L) stop("to must be of length 1")
-  if (!missing_by) if (length(time_by) > 1L) stop("time_by must be of length 1")
-  if (!missing_len) if (length(length.out) > 1L) stop("length.out must be of length 1")
+  if (!missing_from && length(from) > 1L) stop("from must be of length 1")
+  if (!missing_to && length(to) > 1L) stop("to must be of length 1")
+  if (!missing_by && length(time_by) > 1L) stop("time_by must be of length 1")
+  if (!missing_len && length(length.out) > 1L) stop("length.out must be of length 1")
   from_and_to <- !missing_from && !missing_to
   from_and_length <- !missing_from && !missing_len
   to_and_length <- !missing_to && !missing_len
@@ -284,19 +281,19 @@ time_seq <- function(from, to, time_by, length.out = NULL,
 #' @rdname time_seq
 #' @export
 time_seq_sizes <- function(from, to, time_by,
-                           time_type = c("auto", "duration", "period"),
-                           as_period = FALSE){
+                           time_type = c("auto", "duration", "period")){
   time_by <- time_by_list(time_by)
-  tdiff <- abs(time_diff(from, to, time_by = time_by,
-                         time_type = time_type,
-                         as_period = as_period))
-  # Accounting for when from - to / by = 0 / 0
-  tdiff[is.nan(tdiff)] <- 0
-  if (length(tdiff) == 0L ||
-      isTRUE(is_integerable(collapse::fmax(tdiff) + 1))){
-    as.integer(tdiff) + 1L
+  tdiff <- time_diff(from, to, time_by = time_by,
+                     time_type = time_type)
+  tdiff[from == to] <- 0
+  tdiff_rng <- collapse::frange(tdiff, na.rm = TRUE)
+  if (isTRUE(any(tdiff_rng < 0))){
+    stop("At least 1 sequence length is negative, please check the time_by unit increments")
+  }
+  if (length(tdiff) == 0 || all(is_integerable(abs(tdiff_rng) + 1), na.rm = TRUE)){
+    as.integer(tdiff + 1e-10) + 1L
   } else {
-    tdiff + 1
+    trunc(tdiff + 1e-10) + 1
   }
 }
 #' @rdname time_seq
@@ -328,10 +325,10 @@ time_seq_v <- function(from, to, time_by,
 #' @rdname time_seq
 #' @export
 time_seq_v2 <- function(sizes, from, time_by,
-                       time_type = c("auto", "duration", "period"),
-                       time_floor = FALSE,
-                       week_start = getOption("lubridate.week.start", 1),
-                       roll_month = "preday", roll_dst = "pre"){
+                        time_type = c("auto", "duration", "period"),
+                        time_floor = FALSE,
+                        week_start = getOption("lubridate.week.start", 1),
+                        roll_month = "preday", roll_dst = "pre"){
   time_by <- time_by_list(time_by)
   units <- time_by_unit(time_by)
   num <- time_by_num(time_by)
@@ -377,6 +374,9 @@ duration_seq <- function(from, length, duration){
     check_is_datetime(from)
     return(from)
   }
+  if (length < 0 || length == Inf){
+    stop("length must be a non-negative integer")
+  }
   seq.POSIXt(from = from,
              length.out = length, by = unclass(duration))
 }
@@ -398,6 +398,9 @@ period_seq <- function(from, length, unit, num = 1,
                        roll_month = "preday", roll_dst = "pre"){
   if (length(from) == 0L){
     length <- 0L
+  }
+  if (length < 0 || length == Inf){
+    stop("length must be a non-negative integer")
   }
   int_seq <- seq_len(length) - 1L
   if (length == 0L){
@@ -421,9 +424,9 @@ duration_seq_v2 <- function(sizes, from, units, num = 1){
   from <- as_datetime2(from)
   time_by <- add_names(list(num), units)
   num_seconds <- unit_to_seconds(time_by)
-  time_seq <- sequence2(sizes,
-                        from = time_as_number(from),
-                        by = num_seconds)
+  time_seq <- double_sequence(sizes,
+                              from = time_as_number(from),
+                              by = num_seconds)
   .POSIXct(time_seq, lubridate::tz(from))
   # time_cast(time_seq, from)
 }
@@ -441,9 +444,9 @@ date_seq_v2 <- function(sizes, from, units = c("days", "weeks"), num = 1){
   check_is_date(from)
   if (units == "weeks"){
     units <- "days"
-    num <- as.double(num * 7)
+    num <- num * 7
   }
-  out <- sequence2(sizes, from = unclass(from), by = num)
+  out <- double_sequence(sizes, from = unclass(from), by = num)
   class(out) <- "Date"
   out
 }
@@ -518,7 +521,7 @@ period_seq_v2 <- function(sizes, from, units, num = 1,
                  sum(out_sizes))
   # Setnames on the list for timechange::time_add
   by <- add_names(by, rep_len(unit, length(by)))
-  out <- vector("list", nrow2(period_df))
+  out <- vector("list", df_nrow(period_df))
   for (i in df_seq_along(period_df)){
     out[[i]] <- C_time_add(from[i], .subset(by, i), roll_month, roll_dst)
   }
