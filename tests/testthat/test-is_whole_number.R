@@ -41,8 +41,7 @@ testthat::test_that("Whole numbers", {
   testthat::expect_false(is_whole_number(c(-Inf, y)))
 
   testthat::expect_true(
-    is_whole_number(c(110 * 10^200, 1.1 * 100 * 10^200, sqrt(.Machine$double.eps)/10),10^9 + 0.02,
-                    10^9 + 2)
+    is_whole_number(c(110 * 10^200, 1.1 * 100 * 10^200, 10^9 + 2))
   )
   testthat::expect_false(is_whole_number(10^9 + 0.02))
 
@@ -53,6 +52,4 @@ testthat::test_that("Whole numbers", {
   testthat::expect_error(is_whole_number(1.5, tol = NULL))
   testthat::expect_error(is_whole_number(1.5, tol = numeric()))
   testthat::expect_error(is_whole_number(1.5, tol = integer()))
-  # The above is more strict than:
-  # double_equal(10^9 + 0.02, round(10^9 + 0.02))
 })

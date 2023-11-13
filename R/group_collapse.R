@@ -96,8 +96,7 @@ group_collapse.default <- function(data, ..., order = TRUE, sort = FALSE,
             drop = drop)
   out <- GRP_group_data(g)
   if (id){
-    out[[".group"]] <- frowid(out, g = NULL)
-                              # ascending = !isTRUE(!ascending && order))
+    out[[".group"]] <- row_id(out)
   }
   include_loc <- loc ||
     (start && is.null(g[["group.starts"]])) ||
@@ -323,18 +322,12 @@ group_collapse.grouped_df <- function(data, ..., order = TRUE, sort = FALSE,
     sizes <- collapse::vlengths(out[[".loc"]], use.names = FALSE)
     if (start){
       gstarts <- integer(length(sizes))
-      setv(gstarts,
-           which(sizes != 0L),
-           GRP_loc_starts(out[[".loc"]]),
-           vind1 = TRUE)
+      gstarts[cpp_which(sizes != 0L)] <- GRP_loc_starts(out[[".loc"]])
       out[[".start"]] <- gstarts
     }
     if (end){
       gends <- integer(length(sizes))
-      setv(gends,
-           which(sizes != 0L),
-           GRP_loc_ends(out[[".loc"]]),
-           vind1 = TRUE)
+      gends[cpp_which(sizes != 0L)] <- GRP_loc_ends(out[[".loc"]])
       out[[".end"]] <- gends
     }
     if (size){

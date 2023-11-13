@@ -2,50 +2,93 @@
 # It is safer in the sense that if the data isn't ordered by group
 # The result is reordered to be correct
 
-flag2 <- function(x, n = 1L, g = NULL, ...){
+# flag2 <- function(x, n = 1L, g = NULL, ...){
+#   if (is.null(x)){
+#     return(NULL)
+#   }
+#   n <- as.integer(sign(n) * min(vec_length(x), abs(n)))
+#   sorted_group_info <- sort_data_by_GRP(x, g = g, sorted_group_starts = FALSE)
+#   g <- sorted_group_info[["GRP"]]
+#   sorted_g <- sorted_group_info[["sorted_GRP"]]
+#   sorted_x <- sorted_group_info[["x"]]
+#   is_sorted <- sorted_group_info[["sorted"]]
+#   out <- collapse::flag(sorted_x, n = n, g = sorted_g, ...)
+#   if (!is_sorted){
+#     out <- greorder2(out, g = g)
+#   }
+#   out
+# }
+
+flag2 <- function(x, n = 1L, g = NULL, fill = NULL){
   if (is.null(x)){
     return(NULL)
   }
+  N <- vec_length(x)
   n <- as.integer(sign(n) * min(vec_length(x), abs(n)))
-  sorted_group_info <- sort_data_by_GRP(x, g = g, sorted_group_starts = FALSE)
-  g <- sorted_group_info[["GRP"]]
-  sorted_g <- sorted_group_info[["sorted_GRP"]]
-  sorted_x <- sorted_group_info[["x"]]
-  is_sorted <- sorted_group_info[["sorted"]]
-  out <- collapse::flag(sorted_x, n = n, g = sorted_g, ...)
-  if (!is_sorted){
-    out <- greorder2(out, g = g)
+  if (is.null(g)){
+    if (n < 0){
+      if (is_df(x)){
+        return(df_row_slice(x, cpp_roll_lead(df_seq_along(x), abs(n), fill)))
+      } else {
+        return(cpp_roll_lead(x, abs(n), fill))
+      }
+    } else {
+      if (is_df(x)){
+        return(df_row_slice(x, cpp_roll_lag(df_seq_along(x), n, fill)))
+      } else {
+        return(cpp_roll_lag(x, n, fill))
+      }
+    }
   }
-  out
+  o <- radixorderv2(g, starts = FALSE, sort = FALSE, group.sizes = TRUE)
+  if (is_GRP(g)){
+    sizes <- GRP_group_sizes(g)
+    is_sorted <- GRP_is_sorted(g)
+  } else {
+    sizes <- attr(o, "group.sizes")
+    is_sorted <- is.null(g) || isTRUE(attr(o, "sorted"))
+  }
+  # if (is.null(o)){
+  #   o <- seq_len(N)
+  # }
+  # if (is.null(sizes)){
+  #   sizes <- N
+  # }
+  # if (is_sorted){
+  #   collapse::flag(x,  n = n, fill = fill)
+  # } else {
+  if (n >= 0){
+    if (is_df(x)){
+      df_row_slice(x, cpp_roll_lag_grouped(o, n, o, sizes, fill))
+    } else {
+      cpp_roll_lag_grouped(x, n, o, sizes, fill)
+    }
+
+  } else {
+    if (is_df(x)){
+      df_row_slice(x, cpp_roll_lead_grouped(o, abs(n), o, sizes, fill))
+    } else {
+      cpp_roll_lead_grouped(x, abs(n), o, sizes, fill)
+    }
+
+  }
+  # }
 }
+
 fdiff2 <- function(x, n = 1L, g = NULL, ...){
   x - flag2(x, n = n, g = g, ...)
 }
-# Get rolling window sizes, including partial
-window_seq <- function(k, n, partial = TRUE, ascending = TRUE){
-  if (length(k) != 1L) stop("k must be of length 1.")
-  if (length(n) != 1L) stop("n must be of length 1.")
-  if (n > .Machine[["integer.max"]]){
-    stop("n must not be greater than .Machine$integer.max")
-  }
-  n <- as.integer(n)
-  k[is.infinite(k)] <- n
-  k <- as.integer(k)
-  k <- max(k, 0L) # Bound k to >= 0
-  pk <- min(max(k - 1L, 0L), n) # Partial k, bounded to >= 0
-  p_seq <- seq_len(pk) # Partial window sequence
-  out <- collapse::alloc(k, n)
-  # Replace partial part with partial sequence
-  if (partial){
-    out[p_seq] <- p_seq
-  } else {
-    out[p_seq] <- NA_integer_
-  }
-  if (!ascending){
-    out <- .subset(out, n:(min(n, 1L)))
-  }
-  out
+
+window_sequence <- function(size, k, partial = TRUE, ascending = TRUE) {
+  .Call(`_timeplyr_cpp_window_sequence`, size, k, partial, ascending)
 }
+lag_sequence <- function(size, k, partial = TRUE) {
+  .Call(`_timeplyr_cpp_lag_sequence`, size, k, partial)
+}
+lead_sequence <- function(size, k, partial = TRUE) {
+  .Call(`_timeplyr_cpp_lead_sequence`, size, k, partial)
+}
+
 # Vctrs style rolling chop
 roll_chop <- function(x, sizes = collapse::alloc(1L, vec_length(x))){
   x_size <- vec_length(x)

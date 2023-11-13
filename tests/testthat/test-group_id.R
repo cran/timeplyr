@@ -193,7 +193,7 @@ testthat::test_that("Group locs", {
   base3 <- flights %>%
     dplyr::group_by(origin, dest) %>%
     dplyr::group_data() %>%
-    dplyr::mutate(.group = frowid(., NULL))
+    dplyr::mutate(.group = row_id(.))
   base4 <- base2 %>%
     dplyr::mutate(.group = seq_len(nrow(base2)))
   base5 <- base4
@@ -316,4 +316,11 @@ testthat::test_that("group order", {
   testthat::expect_equal(base1$row_id, res1$row_id)
   testthat::expect_equal(base2$row_id, res2$row_id)
   testthat::expect_equal(base3$row_id, res3$row_id)
+})
+
+testthat::test_that("factors", {
+  set.seed(42)
+  ind <- sample.int(150)
+  testthat::expect_equal(group_id(iris$Species[ind]),
+                         as.integer(iris$Species[ind]))
 })

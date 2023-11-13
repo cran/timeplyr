@@ -103,10 +103,11 @@ df_reconstruct <- function(data, template){
 }
 # Row slice
 df_row_slice <- function(data, i, reconstruct = TRUE){
-  if (collapse::fncol(data) == 0L || list_has_interval(data)){
-    if (is.logical(i)){
-      i <- which(i)
-    }
+  if (is.logical(i)){
+    check_length(i, df_nrow(data))
+    i <- cpp_which(i)
+  }
+  if (df_ncol(data) == 0L || list_has_interval(data)){
     .slice <- vctrs::vec_slice
   } else {
     .slice <- collapse::ss
@@ -441,9 +442,8 @@ df_group_id <- function(x){
   }
   N <- df_nrow(x)
   groups <- attr(x, "groups")
-  n_groups <- df_nrow(groups)
   if (is.null(groups)){
-    out <- collapse::alloc(1L, N)
+    out <- seq_ones(N)
   } else {
     rows <- groups[[".rows"]]
     out <- cpp_df_group_indices(rows, N)
@@ -457,7 +457,7 @@ df_reorder <- function(data, g){
 # Drop rows that are all empty
 df_drop_empty <- function(data, .cols = names(data)){
   is_empty_row <- collapse::missing_cases(fselect(data, .cols = .cols), prop = 1)
-  which_not_empty <- collapse::whichv(is_empty_row, FALSE)
+  which_not_empty <- cpp_which(is_empty_row, invert = TRUE)
   df_row_slice(data, which_not_empty)
 }
 # Alternative dplyr way, just for fun

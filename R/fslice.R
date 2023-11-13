@@ -86,41 +86,53 @@ fslice <- function(data, ..., .by = NULL,
   N <- df_nrow(data)
   n <- unlist(dots, recursive = TRUE, use.names = FALSE)
   if (length(n) == 0L) n <- 0L
-  range_sign <- check_range_sign(n)
+  n_rng <- collapse::frange(n)
+  sum_n_rng <- sum(n_rng)
+  if (abs(sum_n_rng) != sum(abs(n_rng))){
+    stop("Can't mix negative and positive locations")
+  }
+  # range_sign <- sign(sum(sign(1/n_rng))) # This can deal with -0
+  range_sign <- sign(sum_n_rng)
   n <- as.integer(n)
   # Groups
   group_vars <- get_groups(data, .by = {{ .by }})
   if (length(group_vars) == 0L){
-    i <- n[data.table::between(n, -N, N)]
+    if (any(abs(n_rng) > N)){
+      i <- n[cpp_which(data.table::between(n, -N, N))]
+    } else {
+      i <- n
+    }
   } else {
-      group_df <- group_collapse(data, .by = {{ .by }},
-                                 order = sort_groups, sort = sort_groups,
-                                 id = FALSE, loc = TRUE,
-                                 # loc_order = FALSE,
-                                 size = TRUE, start = FALSE, end = FALSE)
-      # Constrain n to <= max GRPN
-      GN <-  max(group_df[[".size"]])
-      n <- n[data.table::between(n, -GN, GN)]
-      rows <- group_df[[".loc"]]
-      row_lens <- group_df[[".size"]]
-      if (range_sign >= 1){
-        size <- pmin(max(n), row_lens)
-      } else {
-        size <- pmax(0L, row_lens - max(abs(n)))
-      }
-      keep <- which(size > 0)
-      if (length(rows) - length(keep) > 0L){
-        rows <- rows[keep]
-        row_lens <- row_lens[keep]
-        size <- size[keep]
-      }
-      i <- unlist(lapply(rows, function(x) .subset(x, n)),
-                  use.names = FALSE,
-                  recursive = FALSE)
-      i <- collapse::na_rm(i)
-      if (is.null(i)){
-        i <- integer(0)
-      }
+    group_df <- group_collapse(data, .by = {{ .by }},
+                               order = sort_groups, sort = sort_groups,
+                               id = FALSE, loc = TRUE,
+                               # loc_order = FALSE,
+                               size = TRUE, start = FALSE, end = FALSE)
+    # Constrain n to <= max GRPN
+    GN <-  max(group_df[[".size"]])
+    n <- n[cpp_which(data.table::between(n, -GN, GN))]
+    rows <- group_df[[".loc"]]
+    row_lens <- group_df[[".size"]]
+    if (range_sign >= 1){
+      size <- pmin.int(max(n), row_lens)
+    } else {
+      size <- pmax.int(0L, row_lens - max(abs(n)))
+    }
+    keep <- cpp_which(size > 0)
+    if (length(rows) - length(keep) > 0L){
+      rows <- rows[keep]
+      row_lens <- row_lens[keep]
+      size <- size[keep]
+    }
+    i <- vector("list", length(rows))
+    for (j in seq_along(i)){
+      i[[j]] <- .subset(.subset2(rows, j),
+                        .subset(n, cpp_which(n <= .subset2(row_lens, j))))
+    }
+    i <- unlist(i, use.names = FALSE, recursive = FALSE)
+    if (is.null(i)){
+      i <- integer(0)
+    }
   }
   if (keep_order){
     i <- conditional_sort(i)
@@ -205,12 +217,12 @@ fslice_min <- function(data, order_by, ..., n, prop, .by = NULL,
   out1 <- fslice_head(out, n = n, prop = prop, .by = all_of(grp_nm1),
                       sort_groups = sort_groups)
   if (with_ties){
-    i <- out[[row_nm]][out[[grp_nm]] %in% out1[[grp_nm]]]
+    i <- out[[row_nm]][cpp_which(out[[grp_nm]] %in% out1[[grp_nm]])]
   } else {
     i <- out1[[row_nm]]
   }
   if (na_rm){
-    i2 <- out[[row_nm]][is.na(out[[order_by_nm]])]
+    i2 <- out[[row_nm]][cpp_which(is.na(out[[order_by_nm]]))]
     i <- setdiff(i, i2)
   }
   if (is.null(i)){
@@ -251,12 +263,12 @@ fslice_max <- function(data, order_by, ..., n, prop, .by = NULL,
   out1 <- fslice_head(out, n = n, prop = prop, .by = all_of(grp_nm1),
                       sort_groups = sort_groups)
   if (with_ties){
-    i <- out[[row_nm]][out[[grp_nm]] %in% out1[[grp_nm]]]
+    i <- out[[row_nm]][cpp_which(out[[grp_nm]] %in% out1[[grp_nm]])]
   } else {
     i <- out1[[row_nm]]
   }
   if (na_rm){
-    i2 <- out[[row_nm]][is.na(out[[order_by_nm]])]
+    i2 <- out[[row_nm]][cpp_which(is.na(out[[order_by_nm]]))]
     i <- setdiff(i, i2)
   }
   if (is.null(i)){
@@ -368,10 +380,10 @@ df_slice_prepare <- function(data, n, prop, .by = NULL, sort_groups = TRUE,
       GN <- collapse::fmax(group_sizes, use.g.names = FALSE, na.rm = FALSE)
       if (sign(1/n) >= 1){
         n <- as.integer(min(n, GN))
-        slice_sizes <- pmin(n, group_sizes)
+        slice_sizes <- pmin.int(n, group_sizes)
       } else {
         n <- as.integer(max(n, -GN))
-        slice_sizes <- pmax(0L, group_sizes + n)
+        slice_sizes <- pmax.int(0L, group_sizes + n)
       }
     } else {
       slice_sizes <- rep_len(as.integer(n), length(rows))
@@ -391,7 +403,7 @@ df_slice_prepare <- function(data, n, prop, .by = NULL, sort_groups = TRUE,
     }
     slice_sizes <- as.integer(slice_sizes)
   }
-  keep <- which(slice_sizes > 0)
+  keep <- cpp_which(slice_sizes > 0)
   if (length(rows) - length(keep) > 0L){
     rows <- rows[keep]
     group_sizes <- group_sizes[keep]

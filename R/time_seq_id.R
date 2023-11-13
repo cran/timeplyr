@@ -83,7 +83,7 @@
 time_seq_id <- function(x, time_by = NULL, threshold = 1,
                         g = NULL, na_skip = TRUE,
                         rolling = TRUE, switch_on_boundary = FALSE,
-                        time_type = c("auto", "duration", "period")){
+                        time_type = getOption("timeplyr.time_type", "auto")){
   check_is_time_or_num(x)
   g <- GRP2(g)
   time_by <- time_by_get(x, time_by = time_by, is_sorted = FALSE)
@@ -102,7 +102,8 @@ time_seq_id <- function(x, time_by = NULL, threshold = 1,
     dt <- data.table::data.table(x = telapsed, group_id = GRP_group_id(g))
     group_id_col <- names(dt)[names(dt) == "group_id"]
     over_threshold <- dt[, ("over") :=
-                           roll_time_threshold(get("x"), threshold = threshold,
+                           roll_time_threshold(get("x"),
+                                               threshold = threshold,
                                                switch_on_boundary = switch_on_boundary),
                          by = group_id_col][["over"]]
   }

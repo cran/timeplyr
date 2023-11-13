@@ -278,7 +278,8 @@ fcomplete <- function(data, ..., expand_type = c("crossing", "nesting"),
     #                      how = "full",
     #                      sort = sort)
     if (sort){
-      out <- farrange(out, .cols = names(expanded_df))
+      setorderv2(out, names(expanded_df))
+      # out <- farrange(out, .cols = names(expanded_df))
     }
   }
   # Replace NA with fill
@@ -286,9 +287,8 @@ fcomplete <- function(data, ..., expand_type = c("crossing", "nesting"),
     fill <- fill[!is.na(fill)]
     fill_nms <- names(fill)
     for (i in seq_along(fill)){
-      out[, (fill_nms[[i]]) := data.table::fifelse(is.na(get(fill_nms[[i]])),
-                                                   fill[[i]],
-                                                   get(fill_nms[[i]]))]
+      out[cpp_which(is.na(get(fill_nms[[i]]))),
+          (fill_nms[[i]]) := fill[[i]]]
     }
   }
   out_order <- c(names(data),

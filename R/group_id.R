@@ -173,8 +173,12 @@ group_id.default <- function(data, ..., order = TRUE,
 group_id.factor <- function(data, ..., order = TRUE,
                              ascending = TRUE,
                              as_qg = FALSE){
-  group_id(strip_attrs(unclass(data)),
-           order = order, ascending = ascending, as_qg = as_qg)
+  if (order && ascending && !as_qg){
+    strip_attrs(unclass(data))
+  } else {
+    group_id(unclass(data),
+             order = order, ascending = ascending, as_qg = as_qg)
+  }
 }
 # No need to have this anymore as there is a collapse::GRP.interval method..
 #' @export
@@ -316,12 +320,12 @@ row_id <- function(data, ..., ascending = TRUE,
   UseMethod("row_id")
 }
 #' @export
-row_id.default <- function(data, ..., ascending = TRUE, order = TRUE){
-  frowid(safe_ungroup(data), ascending = ascending, order = order)
+row_id.default <- function(data, ..., ascending = TRUE){
+  frowid(safe_ungroup(data), ascending = ascending)
 }
 #' @export
 row_id.data.frame <- function(data, ...,
-                              ascending = TRUE, order = TRUE,
+                              ascending = TRUE,
                               .by = NULL, .cols = NULL){
   N <- df_nrow(data)
   group_info <- group_info(data, ..., .by = {{ .by }},
@@ -331,15 +335,14 @@ row_id.data.frame <- function(data, ...,
   data <- group_info[["data"]]
   vars <- group_info[["all_groups"]]
   if (length(vars) == 0L){
-    g <- NULL
+    if (ascending){
+      seq_len(N)
+    } else {
+      seq.int(length.out = N, from = N, by = -1L)
+    }
   } else {
-    g <- GRP2(data, by = vars,
-              sort = order,
-              decreasing = FALSE,
-              return.groups = FALSE, return.order = TRUE,
-              call = FALSE)
+    frowid(fselect(data, .cols = vars), ascending = ascending)
   }
-  frowid(data, g = g, ascending = ascending, order = order)
 }
 #' @export
 row_id.grouped_df <- row_id.data.frame
@@ -365,9 +368,9 @@ group_order <- function(data, ..., ascending = TRUE,
 }
 #' @export
 group_order.default <- function(data, ..., ascending = TRUE){
-  as.integer(radixorderv2(data, decreasing = !ascending,
-                          na.last = TRUE, starts = FALSE,
-                          group.sizes = FALSE, sort = TRUE))
+  radixorderv2(data, decreasing = !ascending,
+               na.last = TRUE, starts = FALSE,
+               group.sizes = FALSE, sort = TRUE)
   # Alternate method
   # g <- GRP2(safe_ungroup(data),
   #           sort = TRUE,
@@ -390,7 +393,9 @@ group_order.default <- function(data, ..., ascending = TRUE){
 #' @export
 group_order.Interval <- function(data, ..., ascending = TRUE){
   x <- interval_separate(x)
-  as.integer(collapse::radixorderv(x, decreasing = !ascending))
+  collapse::radixorderv(x, decreasing = !ascending,
+                        na.last = TRUE, starts = FALSE,
+                        group.sizes = FALSE, sort = TRUE)
 }
 #' @export
 group_order.data.frame <- function(data, ..., ascending = TRUE,
@@ -410,11 +415,11 @@ group_order.data.frame <- function(data, ..., ascending = TRUE,
                      by = -1L)
     }
   } else {
-    out <- as.integer(radixorderv2(collapse::fselect(group_info[["data"]],
+    out <- radixorderv2(collapse::fselect(group_info[["data"]],
                                                      all_groups),
                                    decreasing = !ascending,
                                    na.last = TRUE, starts = FALSE,
-                                   group.sizes = FALSE, sort = TRUE))
+                                   group.sizes = FALSE, sort = TRUE)
   }
   out
 }
@@ -473,7 +478,7 @@ group2 <- function(X, ...){
 qG2 <- function(x, sort = TRUE, ordered = FALSE, na.exclude = FALSE, ...){
   if (is_interval(x)){
     if (na.exclude){
-      which_not_na <- collapse::whichv(int_is_na(x), FALSE)
+      which_not_na <- cpp_which(int_is_na(x), invert = TRUE)
       out <- collapse::alloc(NA_integer_, length(x))
       qgroup <- group_id(x[which_not_na], order = sort, as_qg = TRUE)
       n_groups <- attr(qgroup, "N.groups")
@@ -513,17 +518,7 @@ interval_separate <- function(x){
   list(start = attr(x, "start"),
        data = strip_attrs(unclass(x)))
 }
-# list("start" = lubridate::int_start(x),
-#      "data" = lubridate::int_length(x))
-radixorderv2 <- function(x, ...){
-  if (is_interval(x)){
-    x <- interval_separate(x)
-  }
-  if (is.list(x) && list_has_interval(x)){
-    x <- mutate_intervals_to_ids(x)
-  }
-  collapse::radixorderv(x, ...)
-}
+
 group_id_to_qg <- function(x,
                            n_groups = NULL,
                            group_starts = NULL,

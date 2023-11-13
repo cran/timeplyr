@@ -53,7 +53,7 @@
 #'}
 #' @export
 time_diff_gcd <- function(x, time_by = 1,
-                          time_type = c("auto", "duration", "period"),
+                          time_type = getOption("timeplyr.time_type", "auto"),
                           is_sorted = FALSE,
                           tol = sqrt(.Machine$double.eps)){
   if (!is_sorted){
@@ -82,7 +82,7 @@ time_diff_gcd <- function(x, time_by = 1,
       abs(tdiff), digits = log10_tol
     )
   )
-  tdiff <- tdiff[double_gt(tdiff, 0, tol = tol)]
+  tdiff <- tdiff[cpp_which(double_gt(tdiff, 0, tol = tol))]
   if (length(tdiff) == 1 && tdiff == Inf){
     return(10^(-log10_tol))
   }

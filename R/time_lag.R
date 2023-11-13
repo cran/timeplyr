@@ -49,8 +49,8 @@
 time_lag <- function(x, k = 1L,
                      time = seq_along(x),
                      g = NULL,
-                     time_type = c("auto", "duration", "period"),
-                     roll_month = "preday", roll_dst = "pre"){
+                     time_type = getOption("timeplyr.time_type", "auto"),
+                     roll_month = getOption("timeplyr.roll_month", "preday"), roll_dst = getOption("timeplyr.roll_dst", "boundary")){
   k <- time_by_list(k)
   time_num <- time_by_num(k)
   time_by_unit <- time_by_unit(k)
@@ -69,7 +69,7 @@ time_lag <- function(x, k = 1L,
   time_lag <- sizes - (as.integer(1L * k_sign))
   # time_lag <- sizes - 1L
   out <- roll_lag(x, time_lag)
-  which_rolled <- which(time_diff(roll_lag(time, time_lag), time, time_by = k) != 1)
+  which_rolled <- cpp_which(time_diff(roll_lag(time, time_lag), time, time_by = k) != 1)
   out[which_rolled] <- na_init(out)
   out
 }

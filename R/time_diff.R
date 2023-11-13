@@ -47,7 +47,7 @@
 #'}
 #' @export
 time_diff <- function(x, y, time_by = 1,
-                      time_type = c("auto", "duration", "period")){
+                      time_type = getOption("timeplyr.time_type", "auto")){
   tby <- time_by_list(time_by)
   units <- time_by_unit(tby)
   num <- time_by_num(tby)
@@ -86,8 +86,8 @@ time_diff <- function(x, y, time_by = 1,
     if (time_type == "period"){
       unit <- period_unit(units)(abs(num))
       out <- sign(num) * divide_interval_by_period2(x, y, unit)
-      out[num == 0 & x > y] <- -Inf
-      out[num == 0 & x < y] <- Inf
+      out[cpp_which(num == 0 & x > y)] <- -Inf
+      out[cpp_which(num == 0 & x < y)] <- Inf
     } else {
       # unit <- duration_unit(units)(num)
       x <- time_as_number(x)

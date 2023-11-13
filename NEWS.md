@@ -1,10 +1,26 @@
-# timeplyr
+# timeplyr 0.3.0
 
-# timeplyr 0.2.0 (15-Oct-2023)
+* This version brings major performance improvements, including
+new algorithms for subsetting and rolling calculations.
 
-* CRAN submission accepted.
+* The `roll_na_fill` algorithm has been improved significantly.
 
-# timeplyr 0.2.1
+* Calculation of row numbers are faster and more efficient.
+
+* All 'C++' functions are now registered using the cpp11 package.
+
+* `cpp_which` is now available as a more efficient and sometimes faster alternative
+to `which`.
+
+* The double comparison functions have been migrated to the package 'cppdoubles'.
+
+* `roll_na_fill` has been mostly rewritten in C++ for speed and efficiency.
+
+* `roll_growth_rate` now accepts groups through the `g` argument.
+
+* New function `roll_across` for grouped rolling calculations.
+
+# timeplyr 0.2.1 (31-Oct-2023)
 
 * Fixed a bug where `sequence2` would error when `nvec` was a zero-length vector.
 
@@ -37,4 +53,8 @@ additional memory allocation.
 
 * New function `num_na` to efficiently calculate number of missing values.
 
+* timeplyr 0.2.1 published to CRAN
 
+# timeplyr 0.2.0 (15-Oct-2023)
+
+* CRAN submission accepted.

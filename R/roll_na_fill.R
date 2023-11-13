@@ -1,16 +1,31 @@
 #' Fast grouped "locf" `NA` fill
 #'
-#' @description A fast by-group method for
+#' @description A fast and efficient by-group method for
 #' "last-observation-carried-forward" `NA` filling.
 #'
-#' @param x A vector
+#' @param x A vector.
 #' @param g An object use for grouping x
 #' This may be a vector or data frame for example.
 #' @param fill_limit (Optional) maximum number of consecutive NAs to fill
-#' per `NA` cluster.
+#' per `NA` cluster. Default is `Inf`.
 #'
 #' @returns
 #' A filled vector of `x` the same length as `x`.
+#'
+#'
+#' @details
+#'
+#' ## Method
+#'
+#' When supplying groups using `g`, this method uses `radixorder(g)` to
+#' specify how to loop through `x`, making this extremely efficient.
+#'
+#' When `x` contains zero or all `NA` values, then `x` is returned with no copy
+#' made.
+#'
+#' `.roll_na_fill()` is the same as `roll_na_fill()` but without a g argument and
+#' it performs no sanity checks. It is passed straight to c++ which makes it efficient for
+#' loops.
 #'
 #' @examples
 #' library(timeplyr)
@@ -36,80 +51,87 @@
 #'
 #'   # Summary
 #' # Latest version of vctrs with their vec_fill_missing
-#' # Is by far the best for repeated filling and memory efficiency
+#' # Is the fastest but not most memory efficient
 #' # For low repetitions and large vectors, data.table is best
 #'
 #' # For large numbers of repetitions (groups) and data
 #' # that is sorted by groups
-#' # timeplyr is fastest, but not memory efficient
+#' # timeplyr is fastest
 #'
 #' # No groups
 #' bench::mark(e1 = dt[, filled1 := timeplyr::roll_na_fill(x)][]$filled1,
 #'             e2 = dt[, filled2 := data.table::nafill(x, type = "locf")][]$filled2,
 #'             e3 = dt[, filled3 := vctrs::vec_fill_missing(x)][]$filled3,
-#'             e4 = dt[, filled4 := zoo::na.locf0(x)][]$filled4)
+#'             e4 = dt[, filled4 := zoo::na.locf0(x)][]$filled4,
+#'             e5 = dt[, filled5 := timeplyr::.roll_na_fill(x)][]$filled5)
 #' # With group
 #' bench::mark(e1 = dt[, filled1 := timeplyr::roll_na_fill(x, groups)][]$filled1,
 #'             e2 = dt[, filled2 := data.table::nafill(x, type = "locf"), by = groups][]$filled2,
-#'             e3 = dt[, filled3 := vctrs::vec_fill_missing(x), by = groups][]$filled3)
+#'             e3 = dt[, filled3 := vctrs::vec_fill_missing(x), by = groups][]$filled3,
+#'             e4 = dt[, filled4 := timeplyr::.roll_na_fill(x), by = groups][]$filled4)
 #' # Data sorted by groups
 #' setkey(dt, groups)
 #' bench::mark(e1 = dt[, filled1 := timeplyr::roll_na_fill(x, groups)][]$filled1,
 #'             e2 = dt[, filled2 := data.table::nafill(x, type = "locf"), by = groups][]$filled2,
-#'             e3 = dt[, filled3 := vctrs::vec_fill_missing(x), by = groups][]$filled3)
+#'             e3 = dt[, filled3 := vctrs::vec_fill_missing(x), by = groups][]$filled3,
+#'             e4 = dt[, filled4 := timeplyr::.roll_na_fill(x), by = groups][]$filled4)
 #' }
 #' \dontshow{
 #' data.table::setDTthreads(threads = .n_dt_threads)
 #' collapse::set_collapse(nthreads = .n_collapse_threads)
 #'}
+#' @rdname roll_na_fill
 #' @export
-roll_na_fill <- function(x, g = NULL, fill_limit = NULL){
+roll_na_fill <- function(x, g = NULL, fill_limit = Inf){
+  check_length(fill_limit, 1)
   if (num_na(x) %in% c(0L, length(x))){
     return(x)
   }
-  g <- GRP2(g)
-  if (is.null(g)){
-    # Ungrouped method 2 (more flexible, slower)
-    which_na <- collapse::whichNA(x)
-    roll_lag <- integer(length(x))
-    roll_lag[which_na] <- data.table::rleidv(x)[which_na]
-    roll_lag[which_na] <- frowid(roll_lag[which_na], order = FALSE)
-    roll_lag[roll_lag >= seq_along(x)] <- 0L
-    if (!is.null(fill_limit)){
-      if (length(fill_limit) != 1L){
-        stop("fill_limit must be a single whole number")
-      }
-      roll_lag[roll_lag > fill_limit] <- 0L
+  o <- radixorderv2(g, starts = FALSE, sort = FALSE, group.sizes = TRUE)
+  if (is_GRP(g)){
+    sizes <- GRP_group_sizes(g)
+    # Accounting for factors
+    if (collapse::anyv(sizes, 0L)){
+      sizes <- sizes[cpp_which(sizes > 0L)]
     }
-    out <- roll_lag(x, roll_lag, check = FALSE)
   } else {
-    # Grouped method
-    sorted_group_info <- sort_data_by_GRP(x, g = g, sorted_group_starts = FALSE)
-    sorted_g <- sorted_group_info[["sorted_GRP"]]
-    sorted_by_groups <- sorted_group_info[["sorted"]]
-    sorted_x <- sorted_group_info[["x"]]
-    sorted_group_id <- GRP_group_id(sorted_g)
-    is_na <- is.na(sorted_x)
-    which_na <- which(is_na)
-    consecutive_id <- data.table::fifelse(is_na,
-                                          data.table::rleidv(sorted_x),
-                                          0L)
-    roll_lag <- integer(length(sorted_x))
-    roll_lag[which_na] <- frowid(roll_lag, g = list(sorted_group_id,
-                                                    consecutive_id),
-                                    order = FALSE)[which_na]
-    row_id <- frowid(sorted_x, g = sorted_g)
-    roll_lag[roll_lag >= row_id] <- 0L
-    if (!is.null(fill_limit)){
-      if (length(fill_limit) != 1L){
-        stop("fill_limit must be a single whole number")
-      }
-      roll_lag[roll_lag > fill_limit] <- 0L
-    }
-    out <- roll_lag(sorted_x, roll_lag, check = FALSE)
-    if (!sorted_by_groups){
-      out <- collapse::greorder(out, g = g)
-    }
+    sizes <- attr(o, "group.sizes")
+  }
+  if (is.null(o)){
+    out <- .roll_na_fill(x, fill_limit = fill_limit)
+  } else {
+    starts <- attr(o, "starts")
+    out <- cpp_roll_na_fill_grouped(x,
+                                     o = o,
+                                     sizes = sizes,
+                                     fill_limit = fill_limit)
   }
   out
 }
+
+#' @rdname roll_na_fill
+#' @export
+.roll_na_fill <- function(x, fill_limit = Inf){
+  .Call(`_timeplyr_cpp_roll_na_fill`, x, fill_limit)
+}
+
+# Old version that sorts
+# roll_na_fill <- function(x, g = NULL, fill_limit = Inf){
+#   check_length(fill_limit, 1)
+#   if (num_na(x) %in% c(0L, length(x))){
+#     return(x)
+#   }
+#   g <- GRP2(g, sort = TRUE)
+#   sorted_group_info <- sort_data_by_GRP(x, g = g, sorted_group_starts = FALSE)
+#   sorted_g <- sorted_group_info[["sorted_GRP"]]
+#   sorted_x <- sorted_group_info[["x"]]
+#   sorted_by_groups <- sorted_group_info[["sorted"]]
+#   out <- cpp_roll_na_fill_grouped(sorted_x,
+#                                   g = group_id(sorted_g),
+#                                   fill_limit = fill_limit,
+#                                   check_sorted = FALSE)
+#   if (!sorted_by_groups){
+#     out <- greorder2(out, g = g)
+#   }
+#   out
+# }

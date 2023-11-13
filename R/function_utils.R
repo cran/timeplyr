@@ -346,14 +346,14 @@ get_group_info <- function(data, ..., type = c("select", "data-mask"),
        "extra_groups" = extra_groups,
        "all_groups" = all_groups)
 }
-group_info <- function(data, ..., .by = NULL, .cols = NULL,
-                       ungroup = TRUE, rename = TRUE,
-                       dots_type = "data-mask",
-                       unique_groups = TRUE){
+
+group_info_datamask <- function(data, ..., .by = NULL,
+                                ungroup = TRUE,
+                                unique_groups = TRUE){
   n_dots <- dots_length(...)
-  check_cols(n_dots = n_dots, .cols = .cols)
   group_vars <- get_groups(data, {{ .by }})
-  extra_groups <- character(0)
+  group_pos <- match(group_vars, names(data))
+  extra_groups <- character()
   if (ungroup){
     out <- safe_ungroup(data)
   } else {
@@ -361,31 +361,12 @@ group_info <- function(data, ..., .by = NULL, .cols = NULL,
   }
   # Data-masking for dots expressions
   if (n_dots > 0){
-    if (dots_type == "data-mask"){
-      if (ungroup){
-        out <- mutate2(out, ...)
-      } else {
-        out <- mutate2(out, ..., .by = {{ .by }})
-      }
-      extra_groups <- tidy_transform_names(data, ...)
+    if (ungroup){
+      out <- mutate2(out, ...)
     } else {
-      extra_groups <- tidy_select_names(data, ...)
-      out <- frename(out, ...)
+      out <- mutate2(out, ..., .by = {{ .by }})
     }
-  }
-  if (!is.null(.cols)){
-    pos <- col_select_pos(out, .cols = .cols)
-    group_pos <- pos %in% match(group_vars, names(data))
-    # Remove group vars from pos
-    pos <- pos[!group_pos]
-    if (rename){
-      extra_groups <- names(pos)
-      renamed <- is.na(match(extra_groups, names(out)) != pos)
-      renamed_pos <- pos[renamed]
-      out <- frename(out, .cols = renamed_pos)
-    } else {
-      extra_groups <- names(out)[pos]
-    }
+    extra_groups <- tidy_transform_names(data, ...)
   }
   if (unique_groups){
     extra_groups <- extra_groups[match(extra_groups, group_vars, 0L) == 0L]
@@ -397,6 +378,69 @@ group_info <- function(data, ..., .by = NULL, .cols = NULL,
        "dplyr_groups" = group_vars,
        "extra_groups" = extra_groups,
        "all_groups" = all_groups)
+}
+
+group_info_tidyselect <- function(data, ..., .by = NULL, .cols = NULL,
+                                  ungroup = TRUE, rename = TRUE,
+                                  unique_groups = TRUE){
+  n_dots <- dots_length(...)
+  # check_cols(n_dots = n_dots, .cols = .cols)
+  group_vars <- get_groups(data, {{ .by }})
+  group_pos <- match(group_vars, names(data))
+  extra_groups <- character()
+  if (ungroup){
+    out <- safe_ungroup(data)
+  } else {
+    out <- data
+  }
+  # Data-masking for dots expressions
+  if (n_dots > 0){
+    extra_groups <- tidy_select_names(out, ...)
+    if (rename){
+      out <- frename(out, ...)
+    }
+  }
+  if (!is.null(.cols)){
+    extra_group_pos <- col_select_pos(out, .cols = .cols)
+    if (rename){
+      out <- col_rename(out, .cols = .cols)
+      extra_groups <- names(extra_group_pos)
+    } else {
+      extra_groups <- names(data)[extra_group_pos]
+    }
+  }
+  # Recalculate group vars in case they were renamed
+  group_vars <- names(out)[group_pos]
+  if (unique_groups){
+    extra_groups <- extra_groups[match(extra_groups, group_vars, 0L) == 0L]
+    all_groups <- c(group_vars, extra_groups)
+  } else {
+    all_groups <- c(group_vars, extra_groups[match(extra_groups, group_vars, 0L) == 0L])
+  }
+  # all_groups <- c(group_vars, extra_groups[match(extra_groups, group_vars, 0L) == 0L])
+  list("data" = out,
+       "dplyr_groups" = group_vars,
+       "extra_groups" = extra_groups,
+       "all_groups" = all_groups)
+}
+
+group_info <- function(data, ..., .by = NULL, .cols = NULL,
+                       ungroup = TRUE, rename = TRUE,
+                       dots_type = "data-mask",
+                       unique_groups = TRUE){
+  check_cols(n_dots = dots_length(...), .cols = .cols)
+  if (is.null(.cols) && dots_type == "data-mask"){
+    group_info_datamask(data, ..., .by = {{ .by }},
+                        ungroup = ungroup,
+                        unique_groups = unique_groups)
+
+  } else {
+    group_info_tidyselect(data, ..., .by = {{ .by }},
+                          .cols = .cols,
+                          ungroup = ungroup,
+                          rename = rename,
+                          unique_groups = unique_groups)
+  }
 }
 
 
@@ -502,6 +546,11 @@ sample2 <- function(x, size = length(x), replace = FALSE, prob = NULL){
   x[sample.int(length(x), size = size, replace = replace, prob = prob)]
 }
 
+double_equal <- cppdoubles::double_equal
+double_gte <- cppdoubles::double_gte
+double_lte <- cppdoubles::double_lte
+double_gt <- cppdoubles::double_gt
+double_lt <- cppdoubles::double_lt
 setv <- getFromNamespace("setv", "collapse")
 fcumsum <- getFromNamespace("fcumsum", "collapse")
 # set <- getFromNamespace("set", "data.table")
@@ -548,6 +597,9 @@ vec_slice2 <- function(x, i){
   }
 }
 vec_slice3 <- function(x, i){
+  if (is.logical(i)){
+    i <- cpp_which(i)
+  }
   if (is.atomic(x)){
     x[i]
   } else if (is_df(x)){
@@ -620,6 +672,8 @@ vec_width <- function(x){
   }
   out
 }
+
+# Taken from utils package
 getFromNamespace <- function(x, ns, pos = -1, envir = as.environment(pos)){
   if (missing(ns)) {
     nm <- attr(envir, "name", exact = TRUE)
@@ -629,6 +683,15 @@ getFromNamespace <- function(x, ns, pos = -1, envir = as.environment(pos)){
   }
   else ns <- asNamespace(ns)
   get(x, envir = ns, inherits = FALSE)
+}
+packageName <- function (env = parent.frame()){
+  if (!is.environment(env))
+    stop("'env' must be an environment")
+  env <- topenv(env)
+  if (!is.null(pn <- get0(".packageName", envir = env, inherits = FALSE)))
+    pn
+  else if (identical(env, .BaseNamespaceEnv))
+    "base"
 }
 # Checks whether dots are empty or contain NULL
 # Returns TRUE if so, otherwise FALSE
@@ -844,35 +907,7 @@ na_fill <- function(x, n = NULL, prop = NULL){
 sqrt_double_eps <- function(){
   sqrt(.Machine$double.eps)
 }
-# Relative difference
-rel_diff <- function(x, y){
-  abs(x - y) / pmax(abs(x), abs(y))
-}
-abs_diff <- function(x, y){
-  abs(x - y)
-}
 
-# Convenience comparison functions for doubles
-# double_equal <- function(x, y, tol = sqrt(.Machine$double.eps)){
-#   abs(x - y) < tol
-# }
-# double_gt <- function(x, y, tol = sqrt(.Machine$double.eps)){
-#   (x - y) > tol
-# }
-# double_gte <- function(x, y, tol = sqrt(.Machine$double.eps)){
-#   (x - y) > -tol
-# }
-# double_lt <- function(x, y, tol = sqrt(.Machine$double.eps)){
-#   (x - y) < -tol
-# }
-# double_lte <- function(x, y, tol = sqrt(.Machine$double.eps)){
-#   (x - y) < tol
-# }
-# `%~==%` <- double_equal
-# `%~>=%` <- double_gte
-# `%~<=%` <- double_lte
-# `%~>%` <- double_gt
-# `%~<%` <- double_lt
 # Taken from base R to avoid needing R >= 4
 deparse1 <- function(expr, collapse = " ", width.cutoff = 500L, ...){
   paste(deparse(expr, width.cutoff, ...), collapse = collapse)
@@ -1029,6 +1064,14 @@ allNA2 <- function(x){
   }
   collapse::allNA(x)
 }
+# collapse::whichv but handles the case when both x and value are length zero
+whichv2 <- function(x, value, invert = FALSE){
+  if (!length(x) && !length(value)){
+    integer()
+  } else {
+    collapse::whichv(x, value, invert)
+  }
+}
 # Build on top of any and all
 # Are none TRUE?
 none <- function(..., na.rm = FALSE){
@@ -1135,3 +1178,14 @@ collapse_join <- function(x, y, on, how, sort = FALSE, ...){
 #   }
 # }
 
+# Sort x with no copy
+# If y is supplied, sort x using y
+set_order <- function(x, y = NULL){
+  df <- collapse::qDT(list3(x = x, y = y))
+  data.table::setorderv(df, cols = names(df)[df_ncol(df)])
+  invisible(x)
+}
+# Remove NULL list elements
+list_rm_null <- function(x){
+  .subset(x, cpp_list_which_not_null(x))
+}
