@@ -85,3 +85,8 @@ testthat::test_that("Time sequence IDs", {
   testthat::expect_equal(df$id1, df$id3)
   testthat::expect_equal(df$id2, df$id4)
 })
+
+testthat::test_that("Floating point errors", {
+  testthat::expect_identical(suppressMessages(time_id(seq(0, 20, 0.01))), 1:2001)
+  testthat::expect_identical(time_id(seq(0, 20, 0.01), time_by = 0.01), 1:2001)
+})

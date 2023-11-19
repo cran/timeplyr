@@ -86,7 +86,7 @@ time_seq_id <- function(x, time_by = NULL, threshold = 1,
                         time_type = getOption("timeplyr.time_type", "auto")){
   check_is_time_or_num(x)
   g <- GRP2(g)
-  time_by <- time_by_get(x, time_by = time_by, is_sorted = FALSE)
+  time_by <- time_by_get(x, time_by = time_by)
   time_num <- time_by_num(time_by)
   # Elapsed time
   telapsed <- time_elapsed(x, time_by = time_by, g = g,
@@ -94,9 +94,9 @@ time_seq_id <- function(x, time_by = NULL, threshold = 1,
                            na_skip = na_skip, fill = -Inf)
   if (rolling){
     if (switch_on_boundary){
-      over_threshold <- double_gte(telapsed, threshold)
+      over_threshold <- cppdoubles::double_gte(telapsed, threshold)
     } else {
-      over_threshold <- double_gt(telapsed, threshold)
+      over_threshold <- cppdoubles::double_gt(telapsed, threshold)
     }
   } else {
     dt <- data.table::data.table(x = telapsed, group_id = GRP_group_id(g))

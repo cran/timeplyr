@@ -300,10 +300,15 @@ dots_length <- function(...){
 # Greatest common divisor (Euclidean algorithm)
 # Function contributed by 'Matthew Lundberg' at:
 # https://stackoverflow.com/questions/21502181/finding-the-gcd-without-looping-r
-gcd <- function(x, y) {
-  r <- x %% y
-  ifelse(r, gcd(y, r), y)
-}
+
+# gcd2 <- function(x, y, tol = 0) {
+#   while(isTRUE(abs(y) > tol)){
+#     r <- x %% y
+#     x <- y
+#     y <- r
+#   }
+#   x
+# }
 # Original function I wrote using Matthew Lundberg's gcd function above
 # gcd2 <- function(x){
 #   if (!is.numeric(x)){
@@ -314,10 +319,6 @@ gcd <- function(x, y) {
 #   }
 #   Reduce(gcd, x)
 # }
-# Least common multiple (using Euclidean algorithm)
-lcm <- function(x, y){
-  ( abs(x) / gcd(x, y) ) * abs(y)
-}
 
 # Exponentially weighted moving average
 # ewma <- function (x, ratio) {
@@ -546,11 +547,11 @@ sample2 <- function(x, size = length(x), replace = FALSE, prob = NULL){
   x[sample.int(length(x), size = size, replace = replace, prob = prob)]
 }
 
-double_equal <- cppdoubles::double_equal
-double_gte <- cppdoubles::double_gte
-double_lte <- cppdoubles::double_lte
-double_gt <- cppdoubles::double_gt
-double_lt <- cppdoubles::double_lt
+# double_equal <- cppdoubles::double_equal
+# double_gte <- cppdoubles::double_gte
+# double_lte <- cppdoubles::double_lte
+# double_gt <- cppdoubles::double_gt
+# double_lt <- cppdoubles::double_lt
 setv <- getFromNamespace("setv", "collapse")
 fcumsum <- getFromNamespace("fcumsum", "collapse")
 # set <- getFromNamespace("set", "data.table")
@@ -577,7 +578,7 @@ are_whole_numbers <- function(x){
   if (is.integer(x)){
     return(rep_len(TRUE, length(x)))
   }
-  double_equal(x, round(x))
+  abs(x - round(x)) < sqrt(.Machine$double.eps)
 }
 # Unique number from positive numbers
 pair_unique <- function(x, y){

@@ -84,11 +84,9 @@ time_by_list <- function(time_by){
 }
 # Returns list with numeric vector element, where the name of the list
 # is the time unit name
-time_by_get <- function(x, time_by = NULL, is_sorted = FALSE,
-                        quiet = FALSE){
+time_by_get <- function(x, time_by = NULL, quiet = FALSE){
   if (is.null(time_by)){
-    unit_info <- time_granularity(x, is_sorted = is_sorted,
-                                  msg = !quiet)
+    unit_info <- time_granularity(x, msg = !quiet)
     by_n <- unit_info[["num"]]
     by_unit <- unit_info[["unit"]]
     out <- add_names(list(by_n), by_unit)
@@ -107,7 +105,8 @@ time_by_unit <- function(time_by){
   names(time_by)
 }
 time_by_is_num <- function(time_by){
-  isTRUE(class(time_by) %in% c("integer", "numeric")) ||
+  is.numeric(time_by) ||
+  # isTRUE(class(time_by) %in% c("integer", "numeric")) ||
     (is.list(time_by) &&
        length(time_by_unit(time_by)) == 1L &&
        time_by_unit(time_by) == "numeric")
@@ -146,7 +145,7 @@ time_by_pretty <- function(time_by){
     # scale <- pretty_unit_info[["scale"]]
     # pretty_num <- prettyNum(round(num_seconds / scale, 2))
     pretty_num <- round(num, 2)
-    if (!double_equal(num, pretty_num)){
+    if (!cppdoubles::double_equal(num, pretty_num)){
       pretty_num <- paste0("~", pretty_num)
     }
     if (num == 1){
@@ -169,10 +168,12 @@ time_interval <- function(from, to){
   }
   out
 }
-time_granularity <- function(x, is_sorted = FALSE, msg = TRUE){
-  gcd_diff <- time_diff_gcd(x, is_sorted = is_sorted)
-  if (length(gcd_diff) == 0){
+time_granularity <- function(x, msg = TRUE){
+  x <- collapse::funique(x)
+  if (length(x) <= 1){
     gcd_diff <- 1
+  } else {
+    gcd_diff <- abs(gcd_diff(x, round = TRUE))
   }
   if (is_date(x)){
     granularity <- "day(s)"
@@ -205,10 +206,12 @@ time_granularity <- function(x, is_sorted = FALSE, msg = TRUE){
        "scale" = scale)
 }
 # A more focused version
-time_granularity2 <- function(x, is_sorted = FALSE){
-  gcd_diff <- time_diff_gcd(x, is_sorted = is_sorted)
-  if (length(gcd_diff) == 0){
+time_granularity2 <- function(x){
+  x <- collapse::funique(x)
+  if (length(x) <= 1){
     gcd_diff <- 1
+  } else {
+    gcd_diff <- abs(gcd_diff(x, round = TRUE))
   }
   if (is_date(x)){
     unit <- "days"
@@ -500,7 +503,7 @@ time_unit_info <- function(time_unit){
     seconds <- lubridate::second(time_unit)
     out[["second"]] <- seconds
     sum_rng <- lapply(out, function(x) sum(abs(collapse::frange(x, na.rm = TRUE))))
-    keep <- vapply(sum_rng, function(x) isTRUE(double_gt(x, 0)), FALSE)
+    keep <- vapply(sum_rng, function(x) isTRUE(cppdoubles::double_gt(x, 0)), FALSE)
     if (sum(keep) == 0){
       out["second"]
     } else {
@@ -1104,8 +1107,8 @@ time_aggregate_left <- function(x, time_by, g = NULL,
                          roll_month = roll_month, roll_dst = roll_dst)
     set_time_cast(out, int_end)
     end <- time_cast(end, out)
-    which_out_of_bounds <- cpp_which(double_gt(time_as_number(int_end),
-                                               time_as_number(end)))
+    which_out_of_bounds <- cpp_which(cppdoubles::double_gt(time_as_number(int_end),
+                                                           time_as_number(end)))
     int_end[which_out_of_bounds] <- end[which_out_of_bounds]
     out <- structure(out,
                      end = int_end,
@@ -1158,8 +1161,8 @@ time_aggregate_right <- function(x, time_by, g = NULL,
                          roll_month = roll_month, roll_dst = roll_dst)
     set_time_cast(out, int_end)
     start <- time_cast(start, out)
-    which_out_of_bounds <- cpp_which(double_lt(time_as_number(int_end),
-                                               time_as_number(start)))
+    which_out_of_bounds <- cpp_which(cppdoubles::double_lt(time_as_number(int_end),
+                                                           time_as_number(start)))
     int_end[which_out_of_bounds] <- start[which_out_of_bounds]
     out <- structure(out,
                      end = int_end,
@@ -1258,8 +1261,8 @@ time_aggregate_expand <- function(x, time_by, g = NULL,
                          roll_month = roll_month, roll_dst = roll_dst)
     set_time_cast(out, int_end)
     end <- time_cast(end, out)
-    which_out_of_bounds <- cpp_which(double_gt(time_as_number(int_end),
-                                               time_as_number(end)))
+    which_out_of_bounds <- cpp_which(cppdoubles::double_gt(time_as_number(int_end),
+                                                           time_as_number(end)))
     int_end[which_out_of_bounds] <- end[which_out_of_bounds]
     out <- structure(out,
                      end = int_end,

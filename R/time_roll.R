@@ -241,9 +241,9 @@ time_roll_sum <- function(x, window = Inf,
     elapsed <- time_elapsed(time, time_by = unit_time_by,
                             g = sorted_g, rolling = FALSE)
     if (close_left_boundary){
-      is_partial <- double_lte(abs(elapsed) + 1, time_num)
+      is_partial <- cppdoubles::double_lte(abs(elapsed) + 1, time_num)
     } else {
-      is_partial <- double_lt(abs(elapsed) + 1, time_num)
+      is_partial <- cppdoubles::double_lt(abs(elapsed) + 1, time_num)
     }
     out[cpp_which(is_partial)] <- NA_real_
   }
@@ -343,9 +343,9 @@ time_roll_mean <- function(x, window = Inf,
     elapsed <- time_elapsed(time, time_by = unit_time_by,
                             g = sorted_g, rolling = FALSE)
     if (close_left_boundary){
-      is_partial <- double_lte(abs(elapsed) + 1, time_num)
+      is_partial <- cppdoubles::double_lte(abs(elapsed) + 1, time_num)
     } else {
-      is_partial <- double_lt(abs(elapsed) + 1, time_num)
+      is_partial <- cppdoubles::double_lt(abs(elapsed) + 1, time_num)
     }
     out[cpp_which(is_partial)] <- NA_real_
   }
@@ -426,7 +426,7 @@ time_roll_growth_rate <- function(x, window = Inf,
                          gx = sorted_g,
                          gbreaks = sorted_g,
                          right = close_left_boundary)
-  adj_window[is.na(adj_window)] <- 0L
+  adj_window[collapse::whichNA(adj_window)] <- 0L
   final_window <- naive_window - adj_window
   if (is.null(time_step)){
     # Check first for gaps in time
@@ -490,7 +490,7 @@ time_roll_growth_rate <- function(x, window = Inf,
     if (na.rm){
       time_differences <- time_differences -
         data.table::frollsum(is.na(x), n = final_window,
-                             adaptive = partial,
+                             adaptive = TRUE,
                              algo = "fast",
                              align = "right")
     }
@@ -501,9 +501,9 @@ time_roll_growth_rate <- function(x, window = Inf,
     elapsed <- time_elapsed(time, time_by = unit_time_by,
                             g = sorted_g, rolling = FALSE)
     if (close_left_boundary){
-      is_partial <- double_lte(abs(elapsed) + 1, time_num)
+      is_partial <- cppdoubles::double_lte(abs(elapsed) + 1, time_num)
     } else {
-      is_partial <- double_lt(abs(elapsed) + 1, time_num)
+      is_partial <- cppdoubles::double_lt(abs(elapsed) + 1, time_num)
     }
     out[cpp_which(is_partial)] <- NA_real_
   }
@@ -580,9 +580,9 @@ time_roll_window_size <- function(time, window = Inf,
     elapsed <- time_elapsed(time, time_by = unit_time_by,
                             g = g, rolling = FALSE)
     if (close_left_boundary){
-      is_partial <- double_lte(abs(elapsed) + 1, time_num)
+      is_partial <- cppdoubles::double_lte(abs(elapsed) + 1, time_num)
     } else {
-      is_partial <- double_lt(abs(elapsed) + 1, time_num)
+      is_partial <- cppdoubles::double_lt(abs(elapsed) + 1, time_num)
     }
     out[cpp_which(is_partial)] <- NA_integer_
   }
@@ -778,9 +778,9 @@ time_roll_apply <- function(x, window = Inf, fun,
 #     elapsed <- time_elapsed(time, time_by = unit_time_by,
 #                             g = sorted_g, rolling = FALSE)
 #     if (close_left_boundary){
-#       is_partial <- double_lte(abs(elapsed) + 1, time_num)
+#       is_partial <- cppdoubles::double_lte(abs(elapsed) + 1, time_num)
 #     } else {
-#       is_partial <- double_lt(abs(elapsed) + 1, time_num)
+#       is_partial <- cppdoubles::double_lt(abs(elapsed) + 1, time_num)
 #     }
 #     out[cpp_which(is_partial)] <- NA_real_
 #   }

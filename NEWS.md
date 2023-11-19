@@ -1,4 +1,12 @@
-# timeplyr 0.3.0
+# timeplyr
+
+* New function `gcd` for fast calculation of greatest common divisor with 
+tolerance. Time granularity calculations have also been sped up.
+
+* Fixed a rare build issue using `R_SHORT_LEN_MAX` on certain systems. 
+Thanks @barracuda156.
+
+# timeplyr 0.3.0 (13-Nov-2023)
 
 * This version brings major performance improvements, including
 new algorithms for subsetting and rolling calculations.
