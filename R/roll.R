@@ -181,21 +181,10 @@ roll_growth_rate <- function(x, window = Inf, g = NULL,
   lag_window <- roll_window - 1L
   x_lagged <- roll_lag(x, lag_window, check = FALSE)
   if (na.rm){
-    if (is_df(x)){
-      lag_window <- lapply(x, function(x){
-        data.table::frollsum(!is.na(x), n = lag_window,
-                             adaptive = TRUE,
-                             algo = "fast",
-                             align = "right")
-      })
-      lag_window <- df_reconstruct(list_to_data_frame(lag_window), x)
-    } else {
-      lag_window <- data.table::frollsum(!is.na(x), n = lag_window,
-                                         adaptive = TRUE,
-                                         algo = "fast",
-                                         align = "right")
-    }
-
+    lag_window <- data.table::frollsum(!is.na(x), n = lag_window,
+                                       adaptive = TRUE,
+                                       algo = "fast",
+                                       align = "right")
   }
   if (log){
     gr <- exp(( log(x) - log(x_lagged) ) / lag_window)
@@ -213,43 +202,3 @@ roll_growth_rate <- function(x, window = Inf, g = NULL,
   }
   gr
 }
-# roll_max <- function(x, before = 0L, after = 0L,
-#                      g = NULL,
-#                      # partial = TRUE,
-#                      na.rm = TRUE){
-#   stopifnot(is.numeric(x))
-#   sorted_info <- sort_data_by_GRP(x, g = g, sorted_group_starts = FALSE)
-#   group_sizes <- fpluck(sorted_info, "group_sizes")
-#   before_seq <- before_sequence(group_sizes,
-#                                 k = before)
-#   after_seq <- after_sequence(group_sizes,
-#                               k = after)
-#   out <- roll_apply_max(fpluck(sorted_info, "x"),
-#                         before = before_seq,
-#                         after = after_seq,
-#                         na_rm = na.rm)
-#   if (!fpluck(sorted_info, "sorted")){
-#     out <- collapse::greorder(out, g = fpluck(sorted_info, "GRP"))
-#   }
-#   out
-# }
-# roll_min <- function(x, before = 0L, after = 0L,
-#                      g = NULL,
-#                      # partial = TRUE,
-#                      na.rm = TRUE){
-#   stopifnot(is.numeric(x))
-#   sorted_info <- sort_data_by_GRP(x, g = g, sorted_group_starts = FALSE)
-#   group_sizes <- fpluck(sorted_info, "group_sizes")
-#   before_seq <- before_sequence(group_sizes,
-#                                 k = before)
-#   after_seq <- after_sequence(group_sizes,
-#                               k = after)
-#   out <- roll_apply_min(fpluck(sorted_info, "x"),
-#                         before = before_seq,
-#                         after = after_seq,
-#                         na_rm = na.rm)
-#   if (!fpluck(sorted_info, "sorted")){
-#     out <- collapse::greorder(out, g = fpluck(sorted_info, "GRP"))
-#   }
-#   out
-# }

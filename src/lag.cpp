@@ -385,34 +385,88 @@ SEXP cpp_roll_diff(SEXP x, int k, SEXP fill) {
         Rf_error("fill size must be NULL or length 1");
     }
     switch(TYPEOF(x)){
-    case LGLSXP:
+    case LGLSXP: {
+      int fill_value = NA_INTEGER;
+      if (fill_size >= 1){
+        fill_value = Rf_asInteger(fill);
+      }
+      SEXP out = Rf_protect(Rf_allocVector(INTSXP, size));
+      int *p_x = INTEGER(x);
+      int *p_out = INTEGER(out);
+      if (k >= 0){
+        for (R_xlen_t i = 0; i < size; ++i) {
+          if (i < k){
+            p_out[i] = fill_value;
+          } else if ((p_x[i] == NA_INTEGER) || (p_x[i - k] == NA_INTEGER)) {
+            p_out[i] = NA_INTEGER;
+          } else {
+            p_out[i] = p_x[i] - p_x[i - k];
+          }
+        }
+      } else {
+        for (R_xlen_t i = (size - 1); i >= 0; --i) {
+          if (i >= (size + k)){
+            p_out[i] = fill_value;
+          } else if ((p_x[i] == NA_INTEGER) || (p_x[i - k] == NA_INTEGER)) {
+            p_out[i] = NA_INTEGER;
+          }
+          else {
+            p_out[i] = p_x[i] - p_x[i - k];
+          }
+        }
+      }
+      Rf_unprotect(1);
+      return out;
+    }
     case INTSXP: {
-        int fill_value = NA_INTEGER;
-        if (fill_size >= 1){
-            fill_value = Rf_asInteger(fill);
-        }
-        SEXP out = Rf_protect(Rf_allocVector(INTSXP, size));
-        int *p_x = INTEGER(x);
-        int *p_out = INTEGER(out);
-        if (k >= 0){
-            for (R_xlen_t i = 0; i < size; ++i) {
-                if (i < k){
-                    p_out[i] = fill_value;
-                } else {
-                    p_out[i] = p_x[i] - p_x[i - k];
-                }
+      long long diff;
+      long long value;
+      long long lag_value;
+      long long int_max = (long long)std::numeric_limits<int>::max();
+      int fill_value = NA_INTEGER;
+      if (fill_size >= 1){
+        fill_value = Rf_asInteger(fill);
+      }
+      SEXP out = Rf_protect(Rf_allocVector(INTSXP, size));
+      int *p_x = INTEGER(x);
+      int *p_out = INTEGER(out);
+      if (k >= 0){
+        for (R_xlen_t i = 0; i < size; ++i) {
+          if (i < k){
+            p_out[i] = fill_value;
+          } else if ((p_x[i] == NA_INTEGER) || (p_x[i - k] == NA_INTEGER)) {
+            p_out[i] = NA_INTEGER;
+          } else {
+            value = (long long)p_x[i];
+            lag_value = (long long)p_x[i - k];
+            diff = value - lag_value;
+            if (std::llabs(diff) > int_max){
+              p_out[i] = NA_INTEGER;
+            } else {
+              p_out[i] = p_x[i] - p_x[i - k];
             }
-        } else {
-            for (R_xlen_t i = (size - 1); i >= 0; --i) {
-                if (i >= (size + k)){
-                    p_out[i] = fill_value;
-                } else {
-                    p_out[i] = p_x[i] - p_x[i - k];
-                }
-            }
+          }
         }
-        Rf_unprotect(1);
-        return out;
+      } else {
+        for (R_xlen_t i = (size - 1); i >= 0; --i) {
+          if (i >= (size + k)){
+            p_out[i] = fill_value;
+          } else if ((p_x[i] == NA_INTEGER) || (p_x[i - k] == NA_INTEGER)) {
+            p_out[i] = NA_INTEGER;
+          } else {
+            value = (long long)p_x[i];
+            lag_value = (long long)p_x[i - k];
+            diff = value - lag_value;
+            if (std::llabs(diff) > int_max){
+              p_out[i] = NA_INTEGER;
+            } else {
+              p_out[i] = p_x[i] - p_x[i - k];
+            }
+          }
+        }
+      }
+      Rf_unprotect(1);
+      return out;
     }
     case REALSXP: {
         double fill_value = NA_REAL;
@@ -454,6 +508,7 @@ SEXP cpp_roll_diff_grouped(SEXP x, int k, SEXP o, SEXP sizes, SEXP fill) {
     int size = Rf_length(x);
     int o_size = Rf_length(o);
     int fill_size = Rf_length(fill);
+    int n_groups = Rf_length(sizes);
     if (o_size != size){
         Rf_error("x and o must both be the same length");
     }
@@ -467,8 +522,7 @@ SEXP cpp_roll_diff_grouped(SEXP x, int k, SEXP o, SEXP sizes, SEXP fill) {
     int group_count = 0;
     int running_group_size = p_sizes[0];
     switch(TYPEOF(x)){
-    case LGLSXP:
-    case INTSXP: {
+    case LGLSXP: {
         int fill_value = NA_INTEGER;
         if (fill_size >= 1){
             fill_value = Rf_asInteger(fill);
@@ -487,23 +541,29 @@ SEXP cpp_roll_diff_grouped(SEXP x, int k, SEXP o, SEXP sizes, SEXP fill) {
                 }
                 if (group_count < k){
                     p_out[oi] = fill_value;
+                } else if ((p_x[oi] == NA_INTEGER) || (p_x[p_o[i - k] - 1] == NA_INTEGER)) {
+                  p_out[oi] = NA_INTEGER;
                 } else {
                     p_out[oi] = p_x[oi] - p_x[p_o[i - k] - 1];
                 }
                 ++group_count;
             }
         } else {
-            group_count = running_group_size - 1;
+          j = n_groups - 1;
+          running_group_size = p_sizes[j];
+          group_count = running_group_size - 1;
             for (int i = (size - 1); i >= 0; --i) {
                 oi = p_o[i] - 1;
                 // Start of new group?
-                if (i > (running_group_size - 1)){
-                    group_count = (p_sizes[j] - 1);
-                    ++j;
-                    running_group_size += p_sizes[j];
+                if ( (size - i) > running_group_size){
+                  --j;
+                  running_group_size += p_sizes[j];
+                  group_count = p_sizes[j] - 1;
                 }
-                if (group_count >= (size + k)){
+                if (group_count >= (p_sizes[j] + k)){
                     p_out[oi] = fill_value;
+                } else if ((p_x[oi] == NA_INTEGER) || (p_x[p_o[i - k] - 1] == NA_INTEGER)) {
+                  p_out[oi] = NA_INTEGER;
                 } else {
                     p_out[oi] = p_x[oi] - p_x[p_o[i - k] - 1];
                 }
@@ -513,9 +573,77 @@ SEXP cpp_roll_diff_grouped(SEXP x, int k, SEXP o, SEXP sizes, SEXP fill) {
         Rf_unprotect(1);
         return out;
     }
+    case INTSXP: {
+      long long diff;
+      long long value;
+      long long lag_value;
+      long long int_max = (long long)std::numeric_limits<int>::max();
+      int fill_value = NA_INTEGER;
+      if (fill_size >= 1){
+        fill_value = Rf_asInteger(fill);
+      }
+      SEXP out = Rf_protect(Rf_allocVector(INTSXP, size));
+      int *p_x = INTEGER(x);
+      int *p_out = INTEGER(out);
+      if (k >= 0){
+        for (int i = 0; i < size; ++i) {
+          oi = p_o[i] - 1;
+          // Start of new group?
+          if (i > (running_group_size - 1)){
+            ++j;
+            running_group_size += p_sizes[j];
+            group_count = 0;
+          }
+          if (group_count < k){
+            p_out[oi] = fill_value;
+          } else if ((p_x[oi] == NA_INTEGER) || (p_x[p_o[i - k] - 1] == NA_INTEGER)) {
+            p_out[oi] = NA_INTEGER;
+          } else {
+            value = (long long)p_x[oi];
+            lag_value = (long long)p_x[p_o[i - k] - 1];
+            diff = value - lag_value;
+            if (std::llabs(diff) > int_max){
+              p_out[oi] = NA_INTEGER;
+            } else {
+              p_out[oi] = p_x[oi] - p_x[p_o[i - k] - 1];
+            }
+          }
+          ++group_count;
+        }
+      } else {
+        j = n_groups - 1;
+        running_group_size = p_sizes[j];
+        group_count = running_group_size - 1;
+        for (int i = (size - 1); i >= 0; --i) {
+          oi = p_o[i] - 1;
+          // Start of new group?
+          if ( (size - i) > running_group_size){
+            --j;
+            running_group_size += p_sizes[j];
+            group_count = p_sizes[j] - 1;
+          }
+          if (group_count >= (p_sizes[j] + k)){
+            p_out[oi] = fill_value;
+          } else if ((p_x[oi] == NA_INTEGER) || (p_x[p_o[i - k] - 1] == NA_INTEGER)) {
+            p_out[oi] = NA_INTEGER;
+          } else {
+            value = (long long)p_x[oi];
+            lag_value = (long long)p_x[p_o[i - k] - 1];
+            diff = value - lag_value;
+            if (std::llabs(diff) > int_max){
+              p_out[oi] = NA_INTEGER;
+            } else {
+              p_out[oi] = p_x[oi] - p_x[p_o[i - k] - 1];
+            }
+          }
+          --group_count;
+        }
+      }
+      Rf_unprotect(1);
+      return out;
+    }
     case REALSXP: {
         double fill_value = NA_REAL;
-        // k = std::min(k, p_sizes[j]);
         if (fill_size >= 1){
             fill_value = Rf_asReal(fill);
         }
@@ -523,38 +651,40 @@ SEXP cpp_roll_diff_grouped(SEXP x, int k, SEXP o, SEXP sizes, SEXP fill) {
         double *p_x = REAL(x);
         double *p_out = REAL(out);
         if (k >= 0){
-            for (int i = 0; i < size; ++i) {
-                oi = p_o[i] - 1;
-                // Start of new group?
-                if (i > (running_group_size - 1)){
-                    ++j;
-                    running_group_size += p_sizes[j];
-                    group_count = 0;
-                }
-                if (group_count < k){
-                    p_out[oi] = fill_value;
-                } else {
-                    p_out[oi] = p_x[oi] - p_x[p_o[i - k] - 1];
-                }
-                ++group_count;
+          for (int i = 0; i < size; ++i) {
+            oi = p_o[i] - 1;
+            // Start of new group?
+            if (i > (running_group_size - 1)){
+              ++j;
+              running_group_size += p_sizes[j];
+              group_count = 0;
             }
+            if (group_count < k){
+              p_out[oi] = fill_value;
+            } else {
+              p_out[oi] = p_x[oi] - p_x[p_o[i - k] - 1];
+            }
+            ++group_count;
+          }
         } else {
-            group_count = running_group_size - 1;
-            for (int i = (size - 1); i >= 0; --i) {
-                oi = p_o[i] - 1;
-                // Start of new group?
-                if (i > (running_group_size - 1)){
-                    group_count = (p_sizes[j] - 1);
-                    ++j;
-                    running_group_size += p_sizes[j];
-                }
-                if (group_count >= (size + k)){
-                    p_out[oi] = fill_value;
-                } else {
-                    p_out[oi] = p_x[oi] - p_x[p_o[i - k] - 1];
-                }
-                --group_count;
+          j = n_groups - 1;
+          running_group_size = p_sizes[j];
+          group_count = running_group_size - 1;
+          for (int i = (size - 1); i >= 0; --i) {
+            oi = p_o[i] - 1;
+            // Start of new group?
+            if ( (size - i) > running_group_size){
+              --j;
+              running_group_size += p_sizes[j];
+              group_count = p_sizes[j] - 1;
             }
+            if (group_count >= (p_sizes[j] + k)){
+              p_out[oi] = fill_value;
+            } else {
+              p_out[oi] = p_x[oi] - p_x[p_o[i - k] - 1];
+            }
+            --group_count;
+          }
         }
         Rf_unprotect(1);
         return out;
