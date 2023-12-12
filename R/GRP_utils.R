@@ -22,6 +22,35 @@ GRP2 <- function(X, ...){
   }
   out
 }
+group2 <- function(X, starts = FALSE, group.sizes = FALSE){
+  if (is.null(X)){
+    return(NULL)
+  }
+  if (is_df(X) && df_ncol(X) == 0){
+    N <- df_nrow(X)
+    out <- seq_ones(N)
+    attr(out, "N.groups") <- min(1L, N)
+    if (starts){
+      attr(out, "starts") <- if (N == 0) integer() else 1L
+    }
+    if (group.sizes){
+      attr(out, "group.sizes") <- if (N == 0) integer() else N
+    }
+    attr(out, "class") <- c("qG", "na.included")
+    return(out)
+  }
+  if (is.list(X) && length(X) == 0){
+    return(NULL)
+  }
+  if (is_interval(X)){
+    X <- interval_separate(X)
+  }
+  if (is.list(X) && list_has_interval(X)){
+    X <- mutate_intervals_to_ids(X, order = FALSE)
+  }
+  collapse::group(X, starts = starts, group.sizes = group.sizes)
+}
+
 # Not efficient at all but
 # is an interesting alternative because
 # as long as group_id and subset method
@@ -128,14 +157,7 @@ GRP_starts <- function(GRP, use.g.names = FALSE,
       if (is.null(loc)){
         loc <- GRP_loc(GRP, use.g.names = FALSE)
       }
-      gstarts <- GRP_loc_starts(loc)
-      # Accounting for factors with no data
-      if (collapse::anyv(GRP_sizes, 0L)){
-        out <- integer(length(loc))
-        out[cpp_which(GRP_sizes != 0L)] <- gstarts
-      } else {
-        out <- gstarts
-      }
+      out <- list_subset(loc, seq_ones(GRP_n_groups(GRP)), default = 0L)
     }
   }
   if (is.null(out)){
@@ -158,14 +180,7 @@ GRP_ends <- function(GRP, use.g.names = FALSE,
     if (is.null(loc)){
       loc <- GRP_loc(GRP, use.g.names = FALSE)
     }
-    gends <- GRP_loc_ends(loc)
-    # Accounting for factors with no data
-    if (collapse::anyv(GRP_sizes, 0L)){
-      out <- integer(length(loc))
-      out[cpp_which(GRP_sizes != 0L)] <- gends
-    } else {
-      out <- gends
-    }
+    out <- list_subset(loc, GRP_sizes, default = 0L)
   }
   if (is.null(out)){
     out <- integer()
@@ -245,7 +260,6 @@ GRP_loc_starts <- function(loc){
     )
     , use.names = FALSE, recursive = FALSE
   )
-
 }
 GRP_loc_ends <- function(loc){
   unlist(
@@ -526,6 +540,43 @@ greorder2 <- function(x, g, ...){
   }
 }
 
+radixorderv2 <- function(x, na.last = TRUE, decreasing = FALSE,
+                         starts = FALSE, sort = TRUE, group.sizes = FALSE){
+  if (is.null(x)){
+    return(NULL)
+  }
+  if (is_df(x) && df_ncol(x) == 0){
+    N <- df_nrow(x)
+    # if (ascending){
+    out <- seq_len(N)
+    # } else {
+    #   out <- seq.int(from = N,
+    #                  to = min(N, 1L),
+    #                  by = -1L)
+    # }
+    if (starts){
+      attr(out, "starts") <- if (N == 0) integer() else 1L
+    }
+    if (group.sizes){
+      attr(out, "group.sizes") <- if (N == 0) integer() else N
+    }
+    attr(out, "maxgrpn") <- N
+    attr(out, "sorted") <- TRUE
+    return(out)
+  }
+  if (is_GRP(x)){
+    return(GRP_order(x))
+  }
+  if (is_interval(x)){
+    x <- interval_separate(x)
+  }
+  if (is.list(x) && list_has_interval(x)){
+    x <- mutate_intervals_to_ids(x)
+  }
+  collapse::radixorderv(x, starts = starts, sort = sort, group.sizes = group.sizes,
+                        na.last = na.last, decreasing = decreasing)
+}
+
 grouped_seq_len <- function(length, g = NULL, ...){
   if (is_integerable(length)){
     ones <- collapse::alloc(1L, length)
@@ -562,26 +613,6 @@ GRP_row_id <- function(g, ascending = TRUE){
   out
 }
 
-radixorderv2 <- function(x, starts = FALSE, sort = TRUE, group.sizes = FALSE,
-                         ...){
-  if (is.null(x)){
-    return(NULL)
-  }
-  # if (is.integer(x) && "sorted" %in% attr(attributes(x), "names")){
-  #   return(x)
-  # }
-  if (is_GRP(x)){
-    return(GRP_order(x))
-  }
-  if (is_interval(x)){
-    x <- interval_separate(x)
-  }
-  if (is.list(x) && list_has_interval(x)){
-    x <- mutate_intervals_to_ids(x)
-  }
-  collapse::radixorderv(x, starts = starts, sort = sort, group.sizes = group.sizes,
-                        ...)
-}
 grouped_row_id <- function(x, ascending = TRUE){
   o <- radixorderv2(x, starts = FALSE, sort = FALSE, group.sizes = TRUE)
   if (is.null(o)){
@@ -604,9 +635,22 @@ grouped_row_id <- function(x, ascending = TRUE){
       start <- group_sizes
       every <- -1L
     }
-    out <- sequence2(group_sizes, from = start, by = every)
+    out <- sequence(group_sizes, from = start, by = every)
   } else {
     out <- cpp_row_id(o, group_sizes, ascending)
+  }
+  out
+}
+# Helper to grab group sizes
+group_sizes <- function(x, sort = FALSE, expand = FALSE){
+  if (sort && !expand){
+    groups <- radixorderv2(x, group.sizes = TRUE)
+  } else {
+    groups <- group2(x, group.sizes = TRUE)
+  }
+  out <- attr(groups, "group.sizes")
+  if (expand){
+    out <- out[groups]
   }
   out
 }

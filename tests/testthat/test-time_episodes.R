@@ -4,6 +4,7 @@ data.table::setDTthreads(threads = 2L)
 collapse::set_collapse(nthreads = 1L)
 
 testthat::test_that("Testing time episodes", {
+  expect_snapshot({
   flights <- dplyr::select(nycflights13::flights, origin, dest, time_hour)
 
   flights[["id"]] <- row_id(flights)
@@ -601,7 +602,60 @@ testthat::test_that("Testing time episodes", {
     list_to_tibble(list("res2 == ep_id_new" = c(TRUE, NA),
                         "n" = c(13L, 7L)))
   )
-
+})
 })
 
+test_that("Simple episodic tests", {
+  set.seed(4200)
+  df <- dplyr::tibble(time = time_cast(sample.int(30, 15, T), Sys.Date()),
+                      event = sample(c("e", "ne"), 15, T, prob = c(0.6, 0.4)))
 
+  expect_snapshot({
+    df %>%
+      time_episodes(time, time_by = 1, window = 3, .add = FALSE,
+                    # t >= threshold
+                    switch_on_boundary = TRUE) %>%
+      farrange(time)
+  })
+
+  expect_snapshot({
+    df %>%
+      time_episodes(time, time_by = 1, window = 3, .add = TRUE,
+                    # t > threshold
+                    switch_on_boundary = FALSE) %>%
+      farrange(time)
+  })
+
+  expect_snapshot({
+    df %>%
+      time_episodes(time, time_by = 1, window = 3, .add = TRUE,
+                    switch_on_boundary = TRUE,
+                    event = list(event = "e")) %>%
+      farrange(time)
+  })
+
+  expect_snapshot({
+    df %>%
+      time_episodes(time, time_by = 3, window = 1, .add = FALSE,
+                    switch_on_boundary = FALSE,
+                    event = list(event = "e")) %>%
+      farrange(time)
+  })
+  # Cumulative time ---------------------------------------------------------
+  expect_snapshot({
+    df %>%
+      time_episodes(time, time_by = "days", window = 5, .add = FALSE,
+                    roll_episode = FALSE,
+                    switch_on_boundary = TRUE) %>%
+      farrange(time)
+  })
+
+  expect_snapshot({
+    df %>%
+      time_episodes(time, time_by = "5 days", window = 1, .add = FALSE,
+                    roll_episode = FALSE,
+                    switch_on_boundary = FALSE) %>%
+      farrange(time)
+  })
+
+})

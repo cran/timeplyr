@@ -1,4 +1,49 @@
-# timeplyr 0.4.1
+# timeplyr 0.5.0
+
+* The internal code of `time_cut` has been simplified and improved. 
+It can now also handle very large values of `n`. 
+When `time_by` is left `NULL`, the maximum possible number of breaks used is
+`( diff(range(x)) / gcd_diff(x) ) + 1`.
+
+* `time_cut` and `time_summarisev` are now slightly faster.
+
+* `scm` now handles vectors containing only `NA` values appropriately.
+
+* Exported additional sequence functions.
+
+* The default summary functions in `stat_summarise` should now work
+for most vector types.
+
+* `fdistinct` is now faster when `sort = TRUE`.
+
+* In `time_episodes`, the calculation for when there is 
+a mixture of events and non-events has been significantly simplified.
+
+* New functions `roll_lag` and `roll_diff` for rolling lags and differences.
+
+* The `time_roll_` functions are now faster due to having amended the 
+time window size calculation.
+
+* `age_years` is now much faster when there are relatively few distinct pairs
+of start and end dates compared to the full data.
+
+* Period-arithmetic is now much faster and more efficient due a new method 
+for time differencing where distinct start-end values are used.
+
+* `time_count` no longer completes implicit missing gaps in time. 
+Use `time_complete` instead. 
+When using `from` and `to`, `time_count` no longer removes out-of-bounds
+time values and instead simply converted to `NA`. 
+
+* tidyverse-style functions now use a new method for data-masking variables 
+which aligns more closely with the tidyverse equivalents. 
+The previous method evaluated the expressions supplied through `...` twice, 
+once to generate the variables, and twice to extract the resulting variable
+names. These are now evaluated once.
+
+* Improved print method speed for `year_month` and `year_quarter`
+
+# timeplyr 0.4.1 (24-Nov-2023)
 
 * New classes `year_month` and `year_quarter`. 
 Inspired by 'zoo' and 'tsibble', these operate similarly but

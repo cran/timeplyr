@@ -31,25 +31,25 @@ testthat::test_that("Compared to tidyr", {
                              testdf)
   # Grouped calculations
   testthat::expect_equal(testdf %>%
-                               fgroup_by(origin, dest) %>%
+                               dplyr::group_by(origin, dest) %>%
                                fexpand(sort = TRUE),
                              testdf %>%
                                dplyr::group_by(origin, dest) %>%
                                tidyr::expand())
   testthat::expect_equal(testdf %>%
-                               fgroup_by(origin, dest) %>%
+                           dplyr::group_by(origin, dest) %>%
                                fexpand(carrier, sort = TRUE),
                              testdf %>%
                                dplyr::group_by(origin, dest) %>%
                                tidyr::expand(carrier))
   testthat::expect_equal(testdf %>%
-                               fgroup_by(origin) %>%
+                           dplyr::group_by(origin) %>%
                                fexpand(carrier, tailnum, sort = TRUE),
                              testdf %>%
                                dplyr::group_by(origin) %>%
                                tidyr::expand(carrier, tailnum))
   testthat::expect_equal(testdf %>%
-                               fgroup_by(origin) %>%
+                           dplyr::group_by(origin) %>%
                                fexpand(carrier, -5:5, sort = TRUE),
                              testdf %>%
                                dplyr::group_by(origin) %>%
@@ -62,7 +62,7 @@ testthat::test_that("Compared to tidyr", {
                                tidyr::expand(carrier, -5:5) %>%
                                safe_ungroup())
   testthat::expect_equal(testdf %>%
-                               fgroup_by(tailnum) %>%
+                           dplyr::group_by(tailnum) %>%
                                fexpand(carrier, flight, keep_class = FALSE) %>%
                                df_nrow(),
                              185292L)
@@ -73,9 +73,9 @@ testthat::test_that("Compared to tidyr", {
   #                              df_nrow(),
   #                            187205L)
   testthat::expect_equal(testdf %>%
-                               fgroup_by(origin, dest, tailnum) %>%
+                               dplyr::group_by(origin, dest, tailnum) %>%
                                fexpand(carrier, flight,
-                                       expand_type = "nest",
+                                       expand_type = "nesting",
                                        sort = FALSE),
                              testdf %>%
                                dplyr::distinct(origin, dest, tailnum, carrier, flight) %>%
@@ -89,11 +89,11 @@ testthat::test_that("Compared to tidyr", {
                                    log_limit = 6))
   testthat::expect_error(testdf %>%
                            fexpand(origin, 1:11, 1:12, 1:13, 1:10^5,
-                                   expand_type = "nest",
+                                   expand_type = "nesting",
                                    log_limit = 5))
   testthat::expect_equal(testdf %>%
                                  fexpand(1:10, yes = 1:10,
-                                         expand_type = "nest",
+                                         expand_type = "nesting",
                                          sort = TRUE),
                              tidyr::expand_grid(1:10, 1:10) %>%
                                add_names(c("1:10", "yes")))

@@ -201,6 +201,55 @@ extern "C" SEXP _timeplyr_cpp_df_group_indices(SEXP rows, SEXP size) {
     return cpp11::as_sexp(cpp_df_group_indices(cpp11::as_cpp<cpp11::decay_t<SEXP>>(rows), cpp11::as_cpp<cpp11::decay_t<int>>(size)));
   END_CPP11
 }
+// utils.cpp
+SEXP cpp_r_obj_address(SEXP x);
+extern "C" SEXP _timeplyr_cpp_r_obj_address(SEXP x) {
+  BEGIN_CPP11
+    return cpp11::as_sexp(cpp_r_obj_address(cpp11::as_cpp<cpp11::decay_t<SEXP>>(x)));
+  END_CPP11
+}
+// utils.cpp
+bool cpp_any_address_changed(SEXP x, SEXP y);
+extern "C" SEXP _timeplyr_cpp_any_address_changed(SEXP x, SEXP y) {
+  BEGIN_CPP11
+    return cpp11::as_sexp(cpp_any_address_changed(cpp11::as_cpp<cpp11::decay_t<SEXP>>(x), cpp11::as_cpp<cpp11::decay_t<SEXP>>(y)));
+  END_CPP11
+}
+// utils.cpp
+SEXP cpp_lengths(SEXP x);
+extern "C" SEXP _timeplyr_cpp_lengths(SEXP x) {
+  BEGIN_CPP11
+    return cpp11::as_sexp(cpp_lengths(cpp11::as_cpp<cpp11::decay_t<SEXP>>(x)));
+  END_CPP11
+}
+// utils.cpp
+SEXP cpp_bin(SEXP x, SEXP breaks, bool codes, bool right, bool include_lowest, bool include_oob);
+extern "C" SEXP _timeplyr_cpp_bin(SEXP x, SEXP breaks, SEXP codes, SEXP right, SEXP include_lowest, SEXP include_oob) {
+  BEGIN_CPP11
+    return cpp11::as_sexp(cpp_bin(cpp11::as_cpp<cpp11::decay_t<SEXP>>(x), cpp11::as_cpp<cpp11::decay_t<SEXP>>(breaks), cpp11::as_cpp<cpp11::decay_t<bool>>(codes), cpp11::as_cpp<cpp11::decay_t<bool>>(right), cpp11::as_cpp<cpp11::decay_t<bool>>(include_lowest), cpp11::as_cpp<cpp11::decay_t<bool>>(include_oob)));
+  END_CPP11
+}
+// utils.cpp
+SEXP cpp_bin_grouped(SEXP x, SEXP y, bool codes, bool right, bool include_lowest, bool include_oob);
+extern "C" SEXP _timeplyr_cpp_bin_grouped(SEXP x, SEXP y, SEXP codes, SEXP right, SEXP include_lowest, SEXP include_oob) {
+  BEGIN_CPP11
+    return cpp11::as_sexp(cpp_bin_grouped(cpp11::as_cpp<cpp11::decay_t<SEXP>>(x), cpp11::as_cpp<cpp11::decay_t<SEXP>>(y), cpp11::as_cpp<cpp11::decay_t<bool>>(codes), cpp11::as_cpp<cpp11::decay_t<bool>>(right), cpp11::as_cpp<cpp11::decay_t<bool>>(include_lowest), cpp11::as_cpp<cpp11::decay_t<bool>>(include_oob)));
+  END_CPP11
+}
+// utils.cpp
+SEXP cpp_list_subset(SEXP x, SEXP ptype, SEXP i, SEXP default_value);
+extern "C" SEXP _timeplyr_cpp_list_subset(SEXP x, SEXP ptype, SEXP i, SEXP default_value) {
+  BEGIN_CPP11
+    return cpp11::as_sexp(cpp_list_subset(cpp11::as_cpp<cpp11::decay_t<SEXP>>(x), cpp11::as_cpp<cpp11::decay_t<SEXP>>(ptype), cpp11::as_cpp<cpp11::decay_t<SEXP>>(i), cpp11::as_cpp<cpp11::decay_t<SEXP>>(default_value)));
+  END_CPP11
+}
+// utils.cpp
+SEXP cpp_new_list(R_xlen_t size, SEXP default_value);
+extern "C" SEXP _timeplyr_cpp_new_list(SEXP size, SEXP default_value) {
+  BEGIN_CPP11
+    return cpp11::as_sexp(cpp_new_list(cpp11::as_cpp<cpp11::decay_t<R_xlen_t>>(size), cpp11::as_cpp<cpp11::decay_t<SEXP>>(default_value)));
+  END_CPP11
+}
 // which.cpp
 SEXP cpp_which_(SEXP x, bool invert);
 extern "C" SEXP _timeplyr_cpp_which_(SEXP x, SEXP invert) {
@@ -213,6 +262,9 @@ extern "C" {
 static const R_CallMethodDef CallEntries[] = {
     {"_timeplyr_after_sequence",           (DL_FUNC) &_timeplyr_after_sequence,           2},
     {"_timeplyr_before_sequence",          (DL_FUNC) &_timeplyr_before_sequence,          2},
+    {"_timeplyr_cpp_any_address_changed",  (DL_FUNC) &_timeplyr_cpp_any_address_changed,  2},
+    {"_timeplyr_cpp_bin",                  (DL_FUNC) &_timeplyr_cpp_bin,                  6},
+    {"_timeplyr_cpp_bin_grouped",          (DL_FUNC) &_timeplyr_cpp_bin_grouped,          6},
     {"_timeplyr_cpp_dbl_sequence",         (DL_FUNC) &_timeplyr_cpp_dbl_sequence,         3},
     {"_timeplyr_cpp_df_group_indices",     (DL_FUNC) &_timeplyr_cpp_df_group_indices,     2},
     {"_timeplyr_cpp_gcd",                  (DL_FUNC) &_timeplyr_cpp_gcd,                  5},
@@ -223,8 +275,12 @@ static const R_CallMethodDef CallEntries[] = {
     {"_timeplyr_cpp_lcm",                  (DL_FUNC) &_timeplyr_cpp_lcm,                  3},
     {"_timeplyr_cpp_lcm2",                 (DL_FUNC) &_timeplyr_cpp_lcm2,                 4},
     {"_timeplyr_cpp_lead_sequence",        (DL_FUNC) &_timeplyr_cpp_lead_sequence,        3},
+    {"_timeplyr_cpp_lengths",              (DL_FUNC) &_timeplyr_cpp_lengths,              1},
+    {"_timeplyr_cpp_list_subset",          (DL_FUNC) &_timeplyr_cpp_list_subset,          4},
     {"_timeplyr_cpp_list_which_not_null",  (DL_FUNC) &_timeplyr_cpp_list_which_not_null,  1},
+    {"_timeplyr_cpp_new_list",             (DL_FUNC) &_timeplyr_cpp_new_list,             2},
     {"_timeplyr_cpp_num_na",               (DL_FUNC) &_timeplyr_cpp_num_na,               1},
+    {"_timeplyr_cpp_r_obj_address",        (DL_FUNC) &_timeplyr_cpp_r_obj_address,        1},
     {"_timeplyr_cpp_roll_diff",            (DL_FUNC) &_timeplyr_cpp_roll_diff,            3},
     {"_timeplyr_cpp_roll_diff_grouped",    (DL_FUNC) &_timeplyr_cpp_roll_diff_grouped,    5},
     {"_timeplyr_cpp_roll_lag",             (DL_FUNC) &_timeplyr_cpp_roll_lag,             3},

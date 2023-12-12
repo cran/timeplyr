@@ -60,8 +60,8 @@ testthat::test_that("Compare to tidyr", {
                  to = end2,
                  time = time_hour,
                  time_by = "hour",
-                 complete = FALSE,
-                 time_floor = TRUE),
+                 time_floor = TRUE) %>%
+      dplyr::filter(!is.na(time_hour)),
     flights %>%
       dplyr::filter(time_hour >= time_cast(start1, flights$time_hour) &
                       time_hour <= time_cast(end2, flights$time_hour)) %>%
@@ -73,12 +73,9 @@ testthat::test_that("Compare to tidyr", {
       time_count(from = start1,
                  to = end2,
                  time = time_hour,
-                 time_by = "hour",
-                 complete = FALSE),
+                 time_by = "hour"),
     flights %>%
-      dplyr::filter(time_hour >= time_cast(start1, flights$time_hour) &
-                      time_hour <= time_cast(end2, flights$time_hour)) %>%
-      fcount(time_hour = time_summarisev(time_hour, from = start1, to = end1,
+      fcount(time_hour = time_summarisev(time_hour, from = start1, to = end2,
                                          time_by = "hours"))
   )
   testthat::expect_equal(
@@ -86,21 +83,19 @@ testthat::test_that("Compare to tidyr", {
       time_count(time = time_hour, time_by = "hour", sort = TRUE),
     flights %>%
       fcount(time_hour) %>%
-      time_complete(time = time_hour, fill = list(n = 0L),
-                    time_by = "hour", sort = FALSE) %>%
       dplyr::arrange(dplyr::desc(n))
   )
-  testthat::expect_equal(
-    flights %>%
-      time_count(time = time_hour, tailnum, time_by = "year") %>%
-      dplyr::select(tailnum, time_hour, n),
-    flights %>%
-      dplyr::group_by(tailnum) %>%
-      dplyr::summarise(time_hour = min(flights$time_hour),
-                       n = dplyr::n()) %>%
-      safe_ungroup() %>%
-      dplyr::select(tailnum, time_hour, n)
-  )
+  # testthat::expect_equal(
+  #   flights %>%
+  #     time_count(time = time_hour, tailnum, time_by = "year") %>%
+  #     fselect(tailnum, time_hour, n),
+  #   flights %>%
+  #     dplyr::group_by(tailnum) %>%
+  #     dplyr::summarise(time_hour = min(flights$time_hour),
+  #                      n = dplyr::n()) %>%
+  #     safe_ungroup() %>%
+  #     dplyr::select(tailnum, time_hour, n)
+  # )
 
   # Intervals
   testthat::expect_equal(
@@ -119,7 +114,7 @@ testthat::test_that("Compare to tidyr", {
       dplyr::mutate(n_hrs = interval / lubridate::dhours(1)) %>%
       fcount(n_hrs),
     dplyr::tibble(n_hrs = c(0, 1),
-                  n = c(1, 8754))
+                  n = c(1, 6935))
   )
   testthat::expect_equal(
     flights %>%
@@ -131,10 +126,9 @@ testthat::test_that("Compare to tidyr", {
   testthat::expect_equal(
     flights %>%
       time_count(time = time_hour,
-                 include_interval = TRUE, time_by = "3.5 hours") %>%
-    fcount(n_hrs = interval/ duration_unit("hours")(1)),
-    dplyr::tibble(n_hrs = c(0.5, 3.5),
-                  n = c(1L, 2501L))
+                 include_interval = TRUE, time_by = "3.5 hours"),
+    time_countv(flights$time_hour, include_interval = TRUE, time_by = "3.5 hours") %>%
+      frename(.cols = c("time_hour" = "x"))
   )
   testthat::expect_equal(
     flights %>%
@@ -148,7 +142,8 @@ testthat::test_that("Compare to tidyr", {
   )
   res42 <- flights %>%
     dplyr::mutate(start = start1, end = lubridate::dmy(18112013)) %>%
-    time_count(time = time_hour, time_by = "13.5 hours", from = start, to = end, .by = c(origin, dest),
+    time_count(time = time_hour, time_by = "13.5 hours", from = start, to = end,
+               .by = c(origin, dest),
                include_interval = TRUE)
   testthat::expect_equal(res42$time_hour, lubridate::int_start(res42$interval))
   res42 <- flights %>%
@@ -170,152 +165,43 @@ testthat::test_that("Compare to tidyr", {
                     .by = origin) %>%
       fcount(origin, time_hour = month)
   )
-  # Warning
-  # testthat::expect_warning(flights %>%
-  #                            time_count(time = time_hour, lubridate::today()))
-  testthat::expect_equal(flights %>% fcount(origin, dest),
-                             flights %>% time_count(time = NULL,
-                                                    origin, dest))
-  # testthat::expect_equal(flights %>%
-  #                              fcount(origin, dest) %>%
-  #                              tidyr::pivot_wider(names_from = "origin",
-  #                                                 values_from = "n"),
-  #                            flights %>%
-  #                              time_count(origin, dest,
-  #                                         wide_cols = origin))
-  testthat::expect_equal(flights %>%
-                               dplyr::count(time_hour) %>%
-                               tidyr::complete(time_hour = hour_seq,
-                                               fill = list(n = 0)),
-                             flights %>% time_count(time = time_hour, include_interval = FALSE))
-  testthat::expect_equal(flights %>%
-                               dplyr::count(date) %>%
-                               tidyr::complete(date = date_seq,
-                                               fill = list(n = 0)),
-                             flights %>% time_count(time = date,
-                                                    time_by = "day",
-                                                    include_interval = FALSE))
-  # testthat::expect_equal(flights %>%
-  #                              dplyr::count(date, origin, dest) %>%
-  #                              tidyr::complete(date = date_seq,
-  #                                              tidyr::nesting(origin, dest),
-  #                                              fill = list(n = 0)),
-  #                            flights %>% create_ts(date, groups = c(origin, dest),
-  #                                                 by = "day", include_interval = FALSE))
-  # testthat::expect_equal(flights %>%
-  #                              dplyr::count(time_hour, origin, dest) %>%
-  #                              tidyr::complete(time_hour = hour_seq,
-  #                                              fill = list(n = 0),
-  #                                              tidyr::nesting(origin, dest)) %>%
-  #                              dplyr::select(origin, dest, dplyr::everything()) %>%
-  #                              dplyr::group_by(origin, dest),
-  #                            flights %>% dplyr::group_by(origin, dest) %>%
-  #                              create_ts(time_hour, by = "hour", include_interval = FALSE))
-  # testthat::expect_equal(flights %>%
-  #                              dplyr::count(time_hour, origin, dest) %>%
-  #                              tidyr::complete(time_hour = hour_seq,
-  #                                              fill = list(n = 0),
-  #                                              tidyr::nesting(origin, dest)) %>%
-  #                              dplyr::select(origin, dest, dplyr::everything()) %>%
-  #                              dplyr::group_by(origin, dest),
-  #                            flights %>% dplyr::group_by(origin, dest) %>%
-  #                              time_count(time = time_hour, by = "hour", include_interval = FALSE))
-  # testthat::expect_equal(365L,
-  #                            flights %>% create_ts(time_hour, by = "day", include_interval = FALSE) %>%
-  #                              nrow())
-  testthat::expect_equal(365L,
-                             flights %>% time_count(time = time_hour, time_by = "day", include_interval = FALSE) %>%
-                               nrow())
-  # testthat::expect_equal(8755L,
-  #                            flights %>% create_ts(time_hour, time_by = "hour", include_interval = FALSE) %>%
-  #                              nrow())
-  testthat::expect_equal(8755L,
-                             flights %>% time_count(time = time_hour, time_by = "hour", include_interval = FALSE) %>%
-                               nrow())
-  testthat::expect_equal(flights %>% time_count(time = time_hour, time_by = "hour", include_interval = FALSE),
+  testthat::expect_equal(flights %>% fcount(origin, dest, order = FALSE),
+                             flights %>% time_count(time = NULL, origin, dest))
+  testthat::expect_equal(
+    flights %>%
+      time_count(time = time_hour, time_by = "hour", include_interval = FALSE),
                              flights %>% time_count(time = time_hour, time_by = "hour", include_interval = FALSE) %>%
                                dplyr::arrange(time_hour))
-  testthat::expect_equal(flights %>% time_count(time = time_hour, time_by = "day", include_interval = FALSE),
-                             flights %>% time_count(time = time_hour, time_by = "day", include_interval = FALSE) %>%
-                               dplyr::arrange(time_hour))
-  # testthat::expect_equal(flights %>% dplyr::mutate(date = lubridate::as_date(time_hour)) %>%
-  #                              time_count(time = date, time_by = "hour", include_interval = FALSE),
-  #                            flights %>% dplyr::mutate(date = lubridate::as_date(time_hour)) %>%
-  #                              time_count(time = date, time_by = "hour", include_interval = FALSE) %>%
-  #                              dplyr::arrange(date))
-  testthat::expect_equal(flights %>% dplyr::mutate(date = lubridate::as_date(time_hour)) %>%
-                               time_count(time = date, time_by = "day", include_interval = FALSE, complete = FALSE),
-                             flights %>% dplyr::mutate(date = lubridate::as_date(time_hour)) %>%
-                               time_count(time = date, time_by = "day", include_interval = FALSE, complete = FALSE) %>%
-                               dplyr::arrange(date))
-  testthat::expect_equal(flights %>% time_count(time = time_hour, time_by = "week",
-                                                  include_interval = FALSE,
-                                                  complete = FALSE),
-                             flights %>%
-                               time_count(time = time_hour, time_by = "week",
-                                        include_interval = FALSE,
-                                        complete = FALSE) %>%
-                               dplyr::arrange(time_hour))
-  # testthat::expect_equal(flights %>% time_count(dest, origin, time = time_hour, time_by = "week",
-  #                                                 include_interval = FALSE,
-  #                                                 complete = TRUE),
-  #                            flights %>%
-  #                              tidyr::expand(time_hour = time_summarisev(time_hour, time_by = "week", unique = TRUE),
-  #                                      tidyr::nesting(origin, dest))
-  #                              dplyr::count(time_hour, dest, origin)
-  #                              time_count(dest, origin, time = time_hour, time_by = "week",
-  #                                       include_interval = FALSE,
-  #                                       complete = TRUE) %>%
-  #                              dplyr::arrange(dest, origin, time_hour))
-  res1 <- flights %>% time_count(.by = dplyr::all_of(c("origin", "dest")),
+  res1 <- flights %>%
+    time_count(.by = dplyr::all_of(c("origin", "dest")),
                                  time = time_hour,
                                  time_by = "day",
-                                 include_interval = FALSE,
-                                 complete = TRUE)
-  res2 <- flights %>% dplyr::group_by(origin, dest) %>%
+                                 include_interval = FALSE)
+    # time_complete(time_hour, .by = c(origin, dest), fill = list(n = 0),
+    #               time_by = "day")
+  res2 <- flights %>%
+    dplyr::group_by(origin, dest) %>%
     time_count(time = time_hour, time_by = "day",
-                                 include_interval = FALSE,
-                                 complete = TRUE)
+                                 include_interval = FALSE)
   testthat::expect_equal(res1,
                              res1 %>%
                                dplyr::arrange(origin, dest, time_hour))
   testthat::expect_equal(res2,
                              res2 %>%
                                dplyr::arrange(origin, dest, time_hour))
-  res3 <- flights %>% time_count(dest, origin, time = time_hour, time_by = "day",
-                                 include_interval = FALSE,
-                                 complete = TRUE)
+  res3 <- flights %>%
+    time_count(dest, origin, time = time_hour, time_by = "day",
+                                 include_interval = FALSE)
   testthat::expect_equal(res3,
                              res3 %>%
                                dplyr::arrange(time_hour, dest, origin))
-  res4 <- flights %>% time_count(dest, origin, time = time_hour, time_by = "week",
-                                 include_interval = FALSE,
-                                 complete = FALSE)
-  testthat::expect_equal(res4,
-                             res4 %>%
-                               dplyr::arrange(time_hour, dest, origin))
   testthat::expect_equal(flights %>%
-                           time_count(time = time_hour, complete = FALSE, time_by = "quarter",
+                           time_count(time = time_hour, time_by = "quarter",
                                       .by = dest, include_interval = TRUE),
                          flights %>%
                            time_summarise(n = dplyr::n(),
                                           time = time_hour, time_by = "quarter",
                                           .by = dest, include_interval = TRUE))
-  testthat::expect_equal(flights %>%
-                           time_count(time = time_hour, complete = TRUE, time_by = "quarter",
-                                      .by = dest, include_interval = TRUE),
-                         flights %>%
-                           time_summarise(n = dplyr::n(),
-                                          time = time_hour, time_by = "quarter",
-                                          .by = dest) %>%
-                           time_complete(time = time_hour, time_by = "quarter",
-                                         .by = dest,
-                                         fill = list(n = 0)) %>%
-                           dplyr::mutate(interval = tseq_interval(flights$time_hour,
-                                                                  seq = .$time_hour,
-                                                                  gx = group_id(flights$dest),
-                                                                  gseq = group_id(.$dest))) %>%
-                           dplyr::select(dest, time_hour, interval, n))
 })
 
 
@@ -341,20 +227,20 @@ testthat::test_that("Test flooring", {
   testthat::expect_equal(out, res)
 })
 
-testthat::test_that("Test intervals", {
-  testthat::expect_equal(
-    new_tbl(x = 1:10) %>%
-      time_count(x, time_by = 3, include_interval = TRUE),
-    new_tbl(x = c(1, 4, 7, 10),
-            interval = add_attr(c(3, 3, 3, 0),
-                                "start", c(1, 4, 7, 10)),
-            n = c(3, 3, 3, 1))
-  )
-  set.seed(42)
-  df <- new_tbl(x = sample(1:100, replace = T, 10^3)) %>%
-    time_count(x, time_by = 13, include_interval = TRUE, sort = TRUE)
-
-  df$start <- attr(df$interval, "start")
-
-  testthat::expect_equal(df$x, df$start)
-})
+# testthat::test_that("Test intervals", {
+#   testthat::expect_equal(
+#     new_tbl(x = 1:10) %>%
+#       time_count(x, time_by = 3, include_interval = TRUE),
+#     new_tbl(x = c(1, 4, 7, 10),
+#             interval = add_attr(c(3, 3, 3, 0),
+#                                 "start", c(1, 4, 7, 10)),
+#             n = c(3, 3, 3, 1))
+#   )
+#   set.seed(42)
+#   df <- new_tbl(x = sample(1:100, replace = T, 10^3)) %>%
+#     time_count(x, time_by = 13, include_interval = TRUE, sort = TRUE)
+#
+#   df$start <- attr(df$interval, "start")
+#
+#   testthat::expect_equal(df$x, df$start)
+# })

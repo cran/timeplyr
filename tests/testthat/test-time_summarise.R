@@ -23,18 +23,6 @@ testthat::test_that("General tests", {
                             ~ mean(.x, na.rm = TRUE)),
                        .groups = "keep")
   )
-  testthat::expect_equal(
-    flights %>%
-      dplyr::group_by(origin, dest) %>%
-      time_reframe(time = NULL,
-                   across(dplyr::where(is.numeric),
-                            ~ mean(.x, na.rm = TRUE))),
-    flights %>%
-      dplyr::group_by(origin, dest) %>%
-      dplyr_summarise(across(dplyr::where(is.numeric),
-                              ~ mean(.x, na.rm = TRUE))) %>%
-      safe_ungroup()
-  )
   res1 <- flights %>%
     dplyr::group_by(origin, dest) %>%
     time_summarise(across(dplyr::where(is.numeric),
@@ -104,6 +92,15 @@ testthat::test_that("General tests", {
     dplyr::tibble(n_hrs = c(3.11, 3.5),
                   n = c(1L, 14L))
   )
+
+  testthat::expect_snapshot(
+    flights %>%
+      fgroup_by(carrier, order = FALSE) %>%
+      time_summarise(n = dplyr::n(), time = time_hour, time_by = "3 months",
+                     from = min(time_hour) + weeks(1),
+                     include_interval = TRUE) %>%
+      print(n = 10^3, width = Inf)
+  )
 })
 
 testthat::test_that("Test intervals", {
@@ -111,17 +108,8 @@ testthat::test_that("Test intervals", {
     new_tbl(x = 1:10) %>%
       time_summarise(x, time_by = 3, include_interval = TRUE),
     new_tbl(x = c(1, 4, 7, 10),
-            interval = add_attr(c(3, 3, 3, 0),
-                                "start", c(1, 4, 7, 10)))
+            interval = c(3, 3, 3, 0))
   )
-  set.seed(42)
-  df <- new_tbl(x = sample(1:100, replace = T, 10^3)) %>%
-    time_summarise(x, time_by = 13, include_interval = TRUE, sort = TRUE)
-
-  df$start <- attr(df$interval, "start")
-
-  testthat::expect_equal(df$x, df$start)
-
   x <- time_cast(seq(1, 10, 1), Sys.Date())
   int1 <- time_summarisev(x, time_by = "37 seconds",
                           include_interval = TRUE)$interval
@@ -129,8 +117,8 @@ testthat::test_that("Test intervals", {
                               as_int = TRUE)
   int3 <- time_aggregate_expand(x, time_by = "37 seconds",
                                 as_int = TRUE)
-  int2 <- time_interval(time_int_rm_attrs(int2), time_int_end(int2))
-  int3 <- time_interval(time_int_rm_attrs(int3), time_int_end(int3))
+  int2 <- time_interval2(time_int_rm_attrs(int2), time_int_end(int2))
+  int3 <- time_interval2(time_int_rm_attrs(int3), time_int_end(int3))
   testthat::expect_equal(int1, int2)
   testthat::expect_equal(int1, int3)
 })

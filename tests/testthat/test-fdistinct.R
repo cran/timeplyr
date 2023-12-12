@@ -5,6 +5,25 @@ collapse::set_collapse(nthreads = 1L)
 
 testthat::test_that("fdistinct", {
   flights <- nycflights13::flights
+  expect_equal(
+    fdistinct(fselect(iris, .cols = 0)),
+    structure(list(), names = character(0),
+              class = "data.frame",
+              row.names = c(NA, -1L))
+  )
+  expect_equal(
+    fdistinct(fselect(iris, .cols = 0), sort = TRUE),
+    structure(list(), names = character(0),
+              class = "data.frame",
+              row.names = c(NA, -1L))
+  )
+  expect_equal(
+    fdistinct(fselect(iris, .cols = 0), sort = FALSE, order = TRUE),
+    structure(list(), names = character(0),
+              class = "data.frame",
+              row.names = c(NA, -1L))
+  )
+
   testthat::expect_equal(fdistinct(flights, .cols = 0),
                          dplyr::distinct(flights,
                                          dplyr::across(dplyr::all_of(character(0)))))
@@ -68,4 +87,14 @@ testthat::test_that("fdistinct", {
                                dplyr::group_by(dest, origin, tailnum) %>%
                                fslice(0) %>%
                                fdistinct(.keep_all = TRUE))
+  set.seed(42)
+  indices <- sample.int(150)
+  expect_identical(iris %>%
+                     dplyr::slice(indices) %>%
+                     dplyr::group_by(Species) %>%
+                     dplyr::distinct(),
+                   iris %>%
+                     dplyr::slice(indices) %>%
+                     dplyr::group_by(Species) %>%
+                     fdistinct())
 })

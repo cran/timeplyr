@@ -4,7 +4,15 @@
 \alias{time_ggplot}
 \title{Quick time-series ggplot}
 \usage{
-time_ggplot(data, time, value, group = NULL, facet = FALSE, ...)
+time_ggplot(
+  data,
+  time,
+  value,
+  group = NULL,
+  facet = FALSE,
+  geom = ggplot2::geom_line,
+  ...
+)
 }
 \arguments{
 \item{data}{A data frame}
@@ -19,7 +27,9 @@ time_ggplot(data, time, value, group = NULL, facet = FALSE, ...)
 plotted separately or on the same plot?
 Default is \code{FALSE}, or together.}
 
-\item{...}{Further arguments passed to \code{geom_line()}.}
+\item{geom}{\code{ggplot2} 'geom' type. Default is \code{geom_line()}.}
+
+\item{...}{Further arguments passed to the chosen 'geom'.}
 }
 \value{
 A \code{ggplot}.
@@ -31,6 +41,7 @@ plot aggregate time-series data.
 \examples{
 library(dplyr)
 library(timeplyr)
+library(ggplot2)
 \dontshow{
 .n_dt_threads <- data.table::getDTthreads()
 .n_collapse_threads <- collapse::get_collapse()$nthreads
@@ -57,10 +68,22 @@ x \%>\%
 # An example using raw data
 
 ebola <- outbreaks::ebola_sim$linelist
+
+# We can build a helper to count and complete
+# Using the same time grid
+
+count_and_complete <- function(.data, time, ...,
+                               time_by = NULL, time_floor = TRUE){
+  .data \%>\%
+    time_count(!!dplyr::enquo(time), ..., time_by = time_by,
+               time_floor = time_floor) \%>\%
+    time_complete(!!dplyr::enquo(time), ..., time_by = time_by,
+                  time_floor = time_floor, fill = list(n = 0))
+}
 ebola \%>\%
-  time_count(date_of_infection, time_by = "week",
-             outcome) \%>\%
-  time_ggplot(date_of_infection, n, outcome)
+  count_and_complete(date_of_onset, outcome, time_by = "week") \%>\%
+  time_ggplot(date_of_onset, n, geom = geom_blank) +
+  geom_col(aes(fill = outcome))
 \dontshow{
 data.table::setDTthreads(threads = .n_dt_threads)
 collapse::set_collapse(nthreads = .n_collapse_threads)

@@ -57,24 +57,23 @@ time_diff_gcd <- function(x, time_by = 1,
   if (length(x) == 1L && is.na(x)){
     return(NA_real_)
   }
-  if (length(x) == 1L){
+  if (length(x) == 1L ||
+      # Check that the first value is NA since
+      # time_elapsed with rolling = F compares to first value
+      (length(x) == 2 && is.na(x[1L]))){
     return(1)
   }
   tdiff <- time_elapsed(x, rolling = FALSE,
                         time_by = time_by,
                         time_type = time_type,
                         g = NULL,
-                        na_skip = FALSE)
-  tdiff <- cpp_roll_diff(tdiff, k = 1L, fill = 0)
+                        na_skip = TRUE)
+  tdiff <- diff_(tdiff, 1L, fill = 0)
   log10_tol <- ceiling(abs(log10(tol)))
-  tdiff <- round(abs(tdiff), digits = log10_tol + 1)
-  tdiff <- collapse::funique.default(tdiff)
+  if (is.double(tdiff)){
+    tdiff <- round(abs(tdiff), digits = log10_tol + 1)
+  }
   gcd(tdiff, tol = tol, na_rm = TRUE, round = FALSE)
-  # cpp_gcd(as.double(tdiff), tol = as.double(tol),
-  #         start = 1L,
-  #         break_early = TRUE,
-  #         na_rm = TRUE,
-  #         round = FALSE)
 }
 
 # Previous method

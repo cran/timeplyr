@@ -18,30 +18,6 @@ n_unique <- function(x, na.rm = FALSE){
   out - na_offset
 }
 
-# Weighted mean
-# weighted_mean <- function (x, w = NULL, na.rm = FALSE) {
-#   if (is.null(w)) {
-#     N <- length(x)
-#     if (na.rm){
-#       N <- N - num_na(x)
-#     }
-#     out <- sum(x, na.rm = na.rm) / N
-#   }
-#   else {
-#     if (length(w) != length(x)){
-#       stop("'x' and 'w' must have the same length")
-#     }
-#     denom <- x * w
-#     if (na.rm){
-#       complete <- !is.na(denom)
-#       x <- x[complete]
-#       w <- w[complete]
-#     }
-#     out <- sum(denom, na.rm = na.rm) / sum(w)
-#   }
-#   out
-# }
-
 # Transform variables using tidy data masking
 tidy_transform_names <- function(data, ...){
   names(
@@ -66,7 +42,7 @@ col_select_pos <- function(data, .cols = character()){
   nm_seq <- seq_along(data_nms)
   # Method for when cols is supplied
   if (is.numeric(.cols)){
-    rng_sign <- check_range_sign(.cols)
+    rng_sign <- slice_sign(.cols)
     if (rng_sign == -1){
       .cols <- nm_seq[match(nm_seq, abs(.cols), 0L) == 0L]
     } else {
@@ -80,7 +56,7 @@ col_select_pos <- function(data, .cols = character()){
   }
   is_na <- is.na(out)
   if (any(is_na)){
-    first_na_col <- .subset(.cols, .subset(which(is_na), 1L))
+    first_na_col <- .subset(.cols, .subset(cpp_which(is_na), 1L))
     if (is.numeric(first_na_col)){
       stop(paste("Location", first_na_col, "doesn't exist",
                  sep = " "))
@@ -174,13 +150,79 @@ tidy_select_info <- function(data, ..., .cols = NULL){
        "in_nms" = in_nms,
        "renamed" = renamed)
 }
+
+mutate_cols <- getFromNamespace("mutate_cols", "dplyr")
+dplyr_quosures <- getFromNamespace("dplyr_quosures", "dplyr")
+compute_by <- getFromNamespace("compute_by", "dplyr")
+
+mutate_summary_ungrouped <- function(.data, ...,
+                                     .keep = c("all", "used", "unused", "none"),
+                                     error_call = rlang::caller_env()){
+  .keep <- rlang::arg_match(.keep)
+  original_cols <- names(.data)
+  bare_data <- safe_ungroup(.data)
+  group_data <- new_tbl(".rows" = add_attr(list(seq_len(df_nrow(bare_data))),
+                                           "class",
+                                           c("vctrs_list_of", "vctrs_vctr", "list")))
+  by <- add_attr(
+    list(
+      type = "ungrouped",
+      names = character(),
+      data = group_data
+    ),
+    "class",
+    "dplyr_by"
+  )
+  cols <- mutate_cols(bare_data, dplyr_quosures(...),
+                      by = by, error_call = error_call)
+  out_data <- dplyr::dplyr_col_modify(bare_data, cols)
+  final_cols <- names(cols)
+  used <- attr(cols, "used")
+  keep_cols <- switch(.keep,
+                      all = names(used),
+                      none = final_cols,
+                      used = names(used)[cpp_which(used)],
+                      unused = names(used)[cpp_which(used, invert = TRUE)])
+  out_data <- fselect(out_data, .cols = keep_cols)
+  out <- list(data = out_data, cols = final_cols)
+  out
+}
+
+mutate_summary_grouped <- function(.data, ...,
+                                   .keep = c("all", "used", "unused", "none"),
+                                   .by = NULL,
+                                   error_call = rlang::caller_env()){
+  .keep <- rlang::arg_match(.keep)
+  original_cols <- names(.data)
+  by <- compute_by(by = {{ .by }}, data = .data,
+                   by_arg = ".by", data_arg = ".data")
+  group_vars <- get_groups(.data, .by = {{ .by }})
+  cols <- mutate_cols(.data, dplyr_quosures(...),
+                      by = by, error_call = error_call)
+  out_data <- dplyr::dplyr_col_modify(.data, cols)
+  final_cols <- names(cols)
+  used <- attr(cols, "used")
+  keep_cols <- switch(.keep,
+                      all = names(used),
+                      none = final_cols,
+                      used = names(used)[cpp_which(used)],
+                      unused = names(used)[cpp_which(used, invert = TRUE)])
+  # Add missed group vars
+  keep_cols <- c(group_vars, keep_cols[match(keep_cols, group_vars, 0L) == 0L])
+  # Match the original ordering of columns
+  keep_cols <- keep_cols[radix_order(match(keep_cols, original_cols))]
+  out_data <- fselect(out_data, .cols = keep_cols)
+  out <- list(data = out_data, cols = final_cols)
+  out
+}
+
 # Updated version of transmute using mutate
 transmute2 <- function(data, ..., .by = NULL){
   group_vars <- get_groups(data, .by = {{ .by }})
-  out <- mutate2(data, ..., .by = {{ .by }}, .keep = "none")
-  out_nms <- tidy_transform_names(data, ...)
-  fselect(out, .cols = c(group_vars, out_nms))
+  out <- mutate_summary_grouped(data, ..., .by = {{ .by }}, .keep = "none")
+  fselect(out[["data"]], .cols = c(group_vars, out[["cols"]]))
 }
+
 # mutate with a special case when all expressions are just selected columns.
 mutate2 <- function(data, ..., .by = NULL,
                     .keep = c("all", "used", "unused", "none"),
@@ -301,6 +343,11 @@ dots_length <- function(...){
 # Function contributed by 'Matthew Lundberg' at:
 # https://stackoverflow.com/questions/21502181/finding-the-gcd-without-looping-r
 
+# gcd <- function(x,y) {
+#   r <- x%%y;
+#   return(ifelse(r, gcd(y, r), y))
+# }
+
 # gcd2 <- function(x, y, tol = 0) {
 #   while(isTRUE(abs(y) > tol)){
 #     r <- x %% y
@@ -348,40 +395,7 @@ get_group_info <- function(data, ..., type = c("select", "data-mask"),
        "all_groups" = all_groups)
 }
 
-group_info_datamask <- function(data, ..., .by = NULL,
-                                ungroup = TRUE,
-                                unique_groups = TRUE){
-  n_dots <- dots_length(...)
-  group_vars <- get_groups(data, {{ .by }})
-  group_pos <- match(group_vars, names(data))
-  extra_groups <- character()
-  if (ungroup){
-    out <- safe_ungroup(data)
-  } else {
-    out <- data
-  }
-  # Data-masking for dots expressions
-  if (n_dots > 0){
-    if (ungroup){
-      out <- mutate2(out, ...)
-    } else {
-      out <- mutate2(out, ..., .by = {{ .by }})
-    }
-    extra_groups <- tidy_transform_names(data, ...)
-  }
-  if (unique_groups){
-    extra_groups <- extra_groups[match(extra_groups, group_vars, 0L) == 0L]
-    all_groups <- c(group_vars, extra_groups)
-  } else {
-    all_groups <- c(group_vars, extra_groups[match(extra_groups, group_vars, 0L) == 0L])
-  }
-  list("data" = out,
-       "dplyr_groups" = group_vars,
-       "extra_groups" = extra_groups,
-       "all_groups" = all_groups)
-}
-
-group_info_tidyselect <- function(data, ..., .by = NULL, .cols = NULL,
+tidy_group_info_tidyselect <- function(data, ..., .by = NULL, .cols = NULL,
                                   ungroup = TRUE, rename = TRUE,
                                   unique_groups = TRUE){
   n_dots <- dots_length(...)
@@ -413,37 +427,75 @@ group_info_tidyselect <- function(data, ..., .by = NULL, .cols = NULL,
   # Recalculate group vars in case they were renamed
   group_vars <- names(out)[group_pos]
   if (unique_groups){
-    extra_groups <- extra_groups[match(extra_groups, group_vars, 0L) == 0L]
+    extra_groups <- setdiff2(extra_groups, group_vars)
     all_groups <- c(group_vars, extra_groups)
   } else {
-    all_groups <- c(group_vars, extra_groups[match(extra_groups, group_vars, 0L) == 0L])
+    all_groups <- c(group_vars, setdiff2(extra_groups, group_vars))
   }
-  # all_groups <- c(group_vars, extra_groups[match(extra_groups, group_vars, 0L) == 0L])
+  any_groups_changed <- cpp_any_address_changed(df_select(safe_ungroup(data), group_vars),
+                                                df_select(safe_ungroup(out), group_vars))
   list("data" = out,
        "dplyr_groups" = group_vars,
        "extra_groups" = extra_groups,
-       "all_groups" = all_groups)
+       "all_groups" = all_groups,
+       "groups_changed" = any_groups_changed)
 }
 
-group_info <- function(data, ..., .by = NULL, .cols = NULL,
-                       ungroup = TRUE, rename = TRUE,
-                       dots_type = "data-mask",
-                       unique_groups = TRUE){
+tidy_group_info_datamask <- function(data, ..., .by = NULL,
+                                     ungroup = TRUE,
+                                     unique_groups = TRUE){
+  n_dots <- dots_length(...)
+  group_vars <- get_groups(data, {{ .by }})
+  group_pos <- match(group_vars, names(data))
+  extra_groups <- character()
+  if (ungroup){
+    out <- safe_ungroup(data)
+  } else {
+    out <- data
+  }
+  # Data-masking for dots expressions
+  if (n_dots > 0){
+    if (ungroup){
+      out_info <- mutate_summary_ungrouped(out, ...)
+    } else {
+      out_info <- mutate_summary_grouped(out, ..., .by = {{ .by }})
+    }
+    out <- out_info[["data"]]
+    extra_groups <- out_info[["cols"]]
+  }
+  if (unique_groups){
+    extra_groups <- setdiff2(extra_groups, group_vars)
+    all_groups <- c(group_vars, extra_groups)
+  } else {
+    all_groups <- c(group_vars, setdiff2(extra_groups, group_vars))
+  }
+  any_groups_changed <- cpp_any_address_changed(df_select(safe_ungroup(data), group_vars),
+                                                df_select(safe_ungroup(out), group_vars))
+  list("data" = out,
+       "dplyr_groups" = group_vars,
+       "extra_groups" = extra_groups,
+       "all_groups" = all_groups,
+       "groups_changed" = any_groups_changed)
+}
+
+tidy_group_info <- function(data, ..., .by = NULL, .cols = NULL,
+                            ungroup = TRUE, rename = TRUE,
+                            dots_type = "data-mask",
+                            unique_groups = TRUE){
   check_cols(n_dots = dots_length(...), .cols = .cols)
   if (is.null(.cols) && dots_type == "data-mask"){
-    group_info_datamask(data, ..., .by = {{ .by }},
-                        ungroup = ungroup,
-                        unique_groups = unique_groups)
+    tidy_group_info_datamask(data, ..., .by = {{ .by }},
+                             ungroup = ungroup,
+                             unique_groups = unique_groups)
 
   } else {
-    group_info_tidyselect(data, ..., .by = {{ .by }},
-                          .cols = .cols,
-                          ungroup = ungroup,
-                          rename = rename,
-                          unique_groups = unique_groups)
+    tidy_group_info_tidyselect(data, ..., .by = {{ .by }},
+                               .cols = .cols,
+                               ungroup = ungroup,
+                               rename = rename,
+                               unique_groups = unique_groups)
   }
 }
-
 
 # Faster dot nms
 dot_nms <- function(..., use.names = FALSE){
@@ -488,12 +540,8 @@ new_var_nm <- function(data, check = ".group.id"){
 }
 # Recycle arguments
 recycle_args <- function (..., length = NULL, use.names = FALSE){
-  dots <- list(...)
-  # if (length(dots) == 0){
-  #   return(dots)
-  # }
-  out <- dots
-  lens <- collapse::vlengths(out, use.names = FALSE)
+  out <- list(...)
+  lens <- cpp_lengths(out)
   uniq_lens <- collapse::fnunique(lens)
   if (is.null(length)) {
     recycle_length <- collapse::fmax(lens)
@@ -501,7 +549,7 @@ recycle_args <- function (..., length = NULL, use.names = FALSE){
     recycle_length <- length
   }
   recycle_length <- recycle_length * (!collapse::anyv(lens, 0L))
-  recycle <- lens != recycle_length
+  recycle <- cpp_which(lens != recycle_length)
   out[recycle] <- lapply(out[recycle], function(x) rep_len(x, recycle_length))
   if (use.names){
     names(out) <- dot_nms(...)
@@ -565,14 +613,7 @@ fvar <- getFromNamespace("fvar", "collapse")
 fmedian <- getFromNamespace("fmedian", "collapse")
 ffirst <- getFromNamespace("ffirst", "collapse")
 flast <- getFromNamespace("flast", "collapse")
-# Some future utils for counts and weights..
-# wt_fun <- function(wt){
-#   rlang::expr(sum(!!enquo(wt), na.rm = TRUE))
-# }
-# data %>% summarise(!!wt_fun(!!enquo(wt)))
-# quo_name(enquo(wt))
-# quo_is_null()
-
+fndistinct <- getFromNamespace("fndistinct", "collapse")
 
 are_whole_numbers <- function(x){
   if (is.integer(x)){
@@ -636,7 +677,7 @@ vec_length <- function(x){
     if (inherits(x, "data.frame")){
       out <- df_nrow(x)
     } else {
-      out <- collapse::vlengths(x, use.names = FALSE)
+      out <- cpp_lengths(x)
       nunique <- collapse::fnunique(out)
       if (nunique > 1L){
         stop("x must be a vector, matrix, data frame or list with equal lengths")
@@ -660,7 +701,7 @@ vec_width <- function(x){
     if (is_df(x)){
       out <- df_ncol(x)
     } else {
-      lens <- collapse::vlengths(x, use.names = FALSE)
+      lens <- cpp_lengths(x)
       if (collapse::fnunique(lens) > 1L){
         stop("x must be a vector, matrix, data frame or list with equal lengths")
       }
@@ -713,7 +754,7 @@ CJ2 <- function(X){
     return(X)
   }
   out <- vector("list", nargs)
-  d <- lengths(X, use.names = FALSE)
+  d <- cpp_lengths(X)
   orep <- prod(d)
   if (orep == 0L){
     for (i in seq_len(nargs)){
@@ -746,11 +787,7 @@ expr_nms <- function(exprs){
 quo_exprs <- function(quos){
   lapply(quos, rlang::quo_get_expr)
 }
-# expr_identity <- function(exprs, data){
-#   data_nms <- names(data)
-#   quo_nms <- expr_nms(quos)
-#   quo_nms %in% names(data)
-# }
+
 quo_identity <- function(quos, data){
   data_nms <- names(data)
   quo_nms <- quo_nms(quos)
@@ -839,12 +876,18 @@ conditional_sort <- function(x){
 }
 # Check if signs are all equal
 # Special function to handle -0 selection
-check_range_sign <- function(x){
-  out <- sum(sign(1/x))
-  if (abs(out) != length(x)){
+# Returns 1 or -1, with special handling of -0 to allow slicing of all rows
+slice_sign <- function(x){
+  if (length(x)){
+    rng <- collapse::frange(x, na.rm = FALSE)
+  } else {
+    rng <- integer(2L)
+  }
+  rng_sum <- sum(sign(1 / rng))
+  if (abs(rng_sum) != 2){
     stop("Can't mix negative and positive locations")
   }
-  sign(out)
+  as.integer(sign(rng_sum))
 }
 # Base R version of purrr::pluck, alternative to [[
 fpluck <- function(x, .cols = NULL, .default = NULL){
@@ -901,10 +944,6 @@ na_fill <- function(x, n = NULL, prop = NULL){
   }
   x
 }
-# double_precision <- function(x){
-#   y <- log2(pmax(.Machine$double.xmin, abs(x)))
-#   ifelse(x < 0 & floor(y) == y, 2^(y-1), 2^floor(y)) * .Machine$double.eps
-# }
 sqrt_double_eps <- function(){
   sqrt(.Machine$double.eps)
 }
@@ -916,23 +955,36 @@ deparse1 <- function(expr, collapse = " ", width.cutoff = 500L, ...){
 # Bin x by breaks for each group in g
 # Function that takes x (sorted by g) and
 # breaks (sorted by g and itself)
-fbincode <- function(x, breaks, right = TRUE, include.lowest = FALSE,
-                     gx = NULL, gbreaks = NULL){
+# fbincode <- function(x, breaks, right = TRUE, include.lowest = FALSE,
+#                      gx = NULL, gbreaks = NULL){
+#   x_list <- gsplit2(x, g = gx)
+#   breaks_list <- gsplit2(breaks, g = gbreaks)
+#   out <- vector("list", length(x_list))
+#   for (i in seq_along(out)){
+#     out[[i]] <- .bincode(.subset2(x_list, i),
+#                          .subset2(breaks_list, i),
+#                          right = right,
+#                          include.lowest = include.lowest)
+#   }
+#   unlist(out, recursive = FALSE, use.names = FALSE)
+#   # Parallel options
+#   # out <- furrr::future_map2(x_list, breaks_list,
+#   #                           function(x, y) .bincode(x, y,
+#   #                                                   right = right,
+#   #                                                   include.lowest = include.lowest))
+# }
+bin_grouped <- function(x, breaks, gx = NULL, gbreaks = NULL, codes = TRUE,
+                        right = TRUE,
+                        include_lowest = FALSE,
+                        include_oob = FALSE){
   x_list <- gsplit2(x, g = gx)
   breaks_list <- gsplit2(breaks, g = gbreaks)
-  out <- vector("list", length(x_list))
-  for (i in seq_along(out)){
-    out[[i]] <- .bincode(.subset2(x_list, i),
-                         .subset2(breaks_list, i),
+  out <- cpp_bin_grouped(x_list, breaks_list, codes = codes,
+                         include_lowest = include_lowest,
                          right = right,
-                         include.lowest = include.lowest)
-  }
-  unlist(out, recursive = FALSE, use.names = FALSE)
-  # Parallel options
-  # out <- furrr::future_map2(x_list, breaks_list,
-  #                           function(x, y) .bincode(x, y,
-  #                                                   right = right,
-  #                                                   include.lowest = include.lowest))
+                         include_oob = include_oob)
+  ptype <- if (codes) integer() else x[0L]
+  vctrs::list_unchop(out, ptype = ptype)
 }
 # get_cores <- function(){
 #   out <- floor(parallel::detectCores() / 2)
@@ -984,7 +1036,7 @@ check_sorted <- function(x){
 }
 # Retains integer class of a if b is 1 and a is integer
 divide <- function(a, b){
-  if (allv2(b, 1)){
+  if (is.integer(a) && allv2(b, 1)){
     a
   } else {
     a / b
@@ -1042,14 +1094,14 @@ check_is_list <- function(x){
     stop(paste(deparse1(substitute(x)), "must be a list"))
   }
 }
-check_length_one <- function(x){
-  if (length(x) != 1L){
-    stop(paste(deparse1(substitute(x)), "must be of length 1"))
-  }
-}
 check_length <- function(x, size){
   if (length(x) != size){
     stop(paste(deparse1(substitute(x)), "must be of length", size))
+  }
+}
+check_length_lte <- function(x, size){
+  if (!(length(x) <= size)){
+    stop(paste(deparse1(substitute(x)), "must have length <=", size))
   }
 }
 # collapse allv and allna with extra length check
@@ -1155,38 +1207,101 @@ collapse_join <- function(x, y, on, how, sort = FALSE, ...){
 #   invisible(eval(expr, envir = parent.frame(n = 1)))
 # }
 
-# The idea for the future is to use this instead of tidy_transform_names()
-# Ideally safer for functions with side effects and other functions
-# That may error when presented with vectors of length 1.
-# mutate_summary <- function(.data, ..., .by = NULL,
-#                            .keep = c("all", "used", "unused", "none"),
-#                            .before = NULL,
-#                            .after = NULL){
-#   original_names <- names(.data)
-#   for (i in seq_along(.data)){
-#     attr(.data[[i]], ".old_name") <- original_names[i]
-#   }
-#   out <- mutate2(.data, ..., .by = {{ .by }},
-#                  .keep = .keep,
-#                  .before = !!rlang::enquo(.before),
-#                  .after = !!rlang::enquo(.after))
-#   has_old_name_attr <- function(x) !is.null(attr(x, ".old_name"))
-#   used <- logical(length(out))
-#   new <- logical(length(out))
-#   for (i in seq_along(out)){
-#     new[i] <- !has_old_name_attr(out[[i]])
-#     used[i] <- !new[i] && attr(.data[[i]])
-#   }
-# }
-
 # Sort x with no copy
 # If y is supplied, sort x using y
-set_order <- function(x, y = NULL){
-  df <- collapse::qDT(list3(x = x, y = y))
-  data.table::setorderv(df, cols = names(df)[df_ncol(df)])
-  invisible(x)
-}
+# set_order <- function(x, y = NULL){
+#   df <- collapse::qDT(list3(x = x, y = y))
+#   data.table::setorderv(df, cols = names(df)[df_ncol(df)])
+#   invisible(x)
+# }
 # Remove NULL list elements
 list_rm_null <- function(x){
   .subset(x, cpp_list_which_not_null(x))
+}
+
+# nth element
+# returns empty vector if n > length(x)
+nth <- function(x, n){
+  N <- length(x)
+  if (n > N){
+    x[0L]
+  } else {
+    x[n]
+  }
+}
+
+# setdiff where x and y are unique vectors
+setdiff2 <- function(x, y){
+  # x[collapse::whichNA(collapse::fmatch(x, y, overid = 2L))]
+  x[match(x, y, 0L) == 0L]
+}
+intersect2 <- function(x, y){
+  if (is.null(x) || is.null(y)){
+    return(NULL)
+  }
+  c(x[match(x, y, 0L) > 0L], y[numeric()])
+}
+last_class <- function(x){
+  .subset2(class(x), length(class(x)))
+}
+trunc2 <- function(x){
+  if (is.integer(x)) x else trunc(x)
+}
+round2 <- function(x, digits = 0){
+  if (is.integer(x)) x else round(x, digits)
+}
+floor2 <- function(x){
+  if (is.integer(x)) x else floor(x)
+}
+ceiling2 <- function(x){
+  if (is.integer(x)) x else ceiling(x)
+}
+# Convert typeof x to typeof template
+cast2 <- function(x, template){
+  type <- typeof(template)
+  if (identical(typeof(x), type)){
+    x
+  } else {
+    coerce <- get(tolower(paste0("as.", type)))
+    coerce(x)
+  }
+}
+# Exactly the same as .bincode except that
+# breaks can be returned as well as codes
+# One-sided out-of-bounds values can be included
+# Just like in findInterval()
+
+# BREAKS MUST BE SORTED OR THIS WILL CRASH.
+# Use with caution
+
+bin <- function(x, breaks,
+                right = TRUE,
+                include_lowest = FALSE,
+                include_oob = FALSE,
+                codes = TRUE) {
+  .Call(`_timeplyr_cpp_bin`, x, breaks, codes, right, include_lowest, include_oob)
+}
+# Subset 1 element from each list element
+# list items with zero-length vectors are replaced
+# with the default value
+# out-of-bounds subsets are also replaced with the default
+# the idea is that this identity always holds: length(list_subset(x)) == length(x)
+list_subset <- function(x, i, default = NA, copy_attributes = FALSE){
+  check_length(default, 1)
+  if (length(x) == 0){
+    first_element <- NULL
+    ptype <- NULL
+  } else {
+    first_element <- x[[1]]
+    ptype <- first_element[0]
+  }
+  out <- cpp_list_subset(x, ptype, as.integer(i), default)
+  if (copy_attributes){
+    attributes(out) <- attributes(first_element)
+  }
+  out
+}
+# Like vector("list", length) but with a default to fill the list elements
+new_list <- function(length = 0L, default = NULL){
+  cpp_new_list(length, default)
 }

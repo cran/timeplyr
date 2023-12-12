@@ -39,7 +39,7 @@
 #' @examples
 #' library(dplyr)
 #' library(timeplyr)
-#' library(nycflights13)
+#' library(ggplot2)
 #' \dontshow{
 #' .n_dt_threads <- data.table::getDTthreads()
 #' .n_collapse_threads <- collapse::get_collapse()$nthreads
@@ -47,21 +47,27 @@
 #' collapse::set_collapse(nthreads = 1L)
 #' }
 #' # Duplicates across all columns
-#' flights %>%
+#' diamonds %>%
 #'   duplicate_rows()
-#' # Duplicate flights with the same tail number and departure time
-#' flights %>%
-#'   duplicate_rows(tailnum, dep_time)
+#' # Alternatively with row ids
+#' diamonds %>%
+#'   filter(frowid(.) > 1)
+#' # Diamonds with the same dimensions
+#' diamonds %>%
+#'   duplicate_rows(x, y, z)
 #' # Can use tidyverse select notation
-#' flights %>%
-#'   duplicate_rows(across(contains("dep_time")), .keep_all = FALSE)
+#' diamonds %>%
+#'   duplicate_rows(across(where(is.factor)), .keep_all = FALSE)
 #' # Similar to janitor::get_dupes()
-#' flights %>%
-#'   duplicate_rows(tailnum, dep_time, .keep_all = FALSE, .add_count = TRUE)
-#' # For every day were there multiple flights that departed at the same time?
-#' flights %>%
-#'   group_by(year, month, day) %>%
-#'   duplicate_rows(dep_time, arr_time, .both_ways = TRUE)
+#' diamonds %>%
+#'   duplicate_rows(.add_count = TRUE)
+#' # Keep the first instance of each duplicate row
+#' diamonds %>%
+#'   duplicate_rows(.both_ways = TRUE)
+#' # Same as the below
+#' diamonds %>%
+#'   fadd_count(across(everything())) %>%
+#'   filter(n > 1)
 #' \dontshow{
 #' data.table::setDTthreads(threads = .n_dt_threads)
 #' collapse::set_collapse(nthreads = .n_collapse_threads)
@@ -73,10 +79,10 @@ duplicate_rows <- function(data, ..., .keep_all = FALSE,
                            .drop_empty = FALSE, sort = FALSE,
                            .by = NULL, .cols = NULL){
   n_dots <- dots_length(...)
-  group_info <- group_info(data, ..., .by = {{ .by }},
-                           .cols = .cols,
-                           ungroup = TRUE,
-                           rename = TRUE)
+  group_info <- tidy_group_info(data, ..., .by = {{ .by }},
+                                .cols = .cols,
+                                ungroup = TRUE,
+                                rename = TRUE)
   all_groups <- group_info[["all_groups"]]
   out <- group_info[["data"]]
   out_nms <- names(out)
@@ -92,7 +98,7 @@ duplicate_rows <- function(data, ..., .keep_all = FALSE,
       out_vars <- dup_vars
     }
   }
-  if (length(group_info[["extra_groups"]]) == 0L){
+  if (length(group_info[["extra_groups"]]) == 0L && !group_info[["groups_changed"]]){
     out <- data
   }
   out <- fselect(out, .cols = out_vars)
@@ -187,63 +193,3 @@ fduplicates2 <- function(data, ..., .keep_all = FALSE,
   out2[[id_nm]] <- NULL
   df_reconstruct(out2, data)
 }
-# Tidyverse-only version.
-# duplicate_rows <- function(data, ..., .keep_all = FALSE,
-#                            .both_ways = FALSE, .keep_na = TRUE,
-#                            .by = NULL){
-#   # Data groups
-#   group_vars <- get_groups(data, .by = {{ .by }})
-#   # If no variables selected then all variables used
-#   if (dots_length(...) == 0){
-#     dup_vars_all <- names(data)
-#   } else {
-#     if (.keep_all){
-#       data <- data %>%
-#         safe_ungroup() %>%
-#         dplyr::mutate(!!!enquos(...)) %>%
-#         df_reconstruct(data)
-#       dup_vars_all <- tidy_transform_names(safe_ungroup(data),
-#                                            !!!enquos(...))
-#     } else {
-#       data <- data %>%
-#         safe_ungroup() %>%
-#         dplyr::mutate(!!!enquos(...)) %>%
-#         df_reconstruct(data)
-#       keep_vars <- tidy_transform_names(safe_ungroup(data),
-#                                         !!!enquos(...))
-#       data <- data %>%
-#         dplyr::select(all_of(c(group_vars, keep_vars)))
-#       dup_vars_all <- names(data)
-#     }
-#   }
-#   dup_vars <- setdiff(dup_vars_all, group_vars)
-#   # Add column with row ID to keep track of rows
-#   id_var <- new_var_nm(data, ".id")
-#   data <- dplyr::mutate(data, .id = dplyr::row_number(),
-#                         .by = {{ .by }})
-#   # data with ID and dup cols
-#   df_unique <- data %>%
-#     dplyr::select(all_of(c(id_var, dup_vars_all))) %>%
-#     dplyr::distinct(across(all_of(dup_vars_all)), .keep_all = TRUE)
-#   # Duplicate rows
-#   out <- data %>%
-#     dplyr::anti_join(df_unique, by = c(group_vars, id_var))
-#   # Remove empty rows (rows with all NA values)
-#   if (!.keep_na){
-#     out <- out %>%
-#       dplyr::filter(!dplyr::if_all(.cols = all_of(dup_vars), is.na))
-#   }
-#   # Keep duplicates including first instance of duplicated rows
-#   if (.both_ways) out <- dplyr::semi_join(data,
-#                                             dplyr::select(out,
-#                                                           all_of(dup_vars_all)),
-#                                             by = dup_vars_all)
-#   # Keep all columns or only duplicate search ones?
-#   if (.keep_all) {
-#     out %>%
-#       dplyr::select(-all_of(id_var))
-#   } else {
-#     out %>%
-#       dplyr::select(all_of(dup_vars_all))
-#   }
-# }

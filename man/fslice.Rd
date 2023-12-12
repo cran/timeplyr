@@ -59,13 +59,12 @@ fslice_max(
 
 fslice_sample(
   data,
-  ...,
   n,
+  replace = FALSE,
   prop,
   .by = NULL,
   keep_order = FALSE,
   sort_groups = TRUE,
-  replace = FALSE,
   weights = NULL,
   seed = NULL
 )
@@ -119,6 +118,11 @@ When there are lots of groups, the \code{fslice()} functions are much faster.
 Furthermore, you can control whether the returned data frame is sliced in
 the order of the supplied row indices, or whether the
 original order is retained (like \code{dplyr::filter()}).
+
+In \code{fslice()}, when \code{length(n) == 1}, an optimised method is implemented
+that internally uses \code{list_subset()}, a fast function for extracting
+single elements from single-level lists that contain vectors of the same
+type, e.g. integer.
 
 \code{fslice_head()} and \code{fslice_tail()} are very fast with large numbers of groups.
 

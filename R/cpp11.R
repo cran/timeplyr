@@ -112,6 +112,34 @@ cpp_df_group_indices <- function(rows, size) {
   .Call(`_timeplyr_cpp_df_group_indices`, rows, size)
 }
 
+cpp_r_obj_address <- function(x) {
+  .Call(`_timeplyr_cpp_r_obj_address`, x)
+}
+
+cpp_any_address_changed <- function(x, y) {
+  .Call(`_timeplyr_cpp_any_address_changed`, x, y)
+}
+
+cpp_lengths <- function(x) {
+  .Call(`_timeplyr_cpp_lengths`, x)
+}
+
+cpp_bin <- function(x, breaks, codes, right, include_lowest, include_oob) {
+  .Call(`_timeplyr_cpp_bin`, x, breaks, codes, right, include_lowest, include_oob)
+}
+
+cpp_bin_grouped <- function(x, y, codes, right, include_lowest, include_oob) {
+  .Call(`_timeplyr_cpp_bin_grouped`, x, y, codes, right, include_lowest, include_oob)
+}
+
+cpp_list_subset <- function(x, ptype, i, default_value) {
+  .Call(`_timeplyr_cpp_list_subset`, x, ptype, i, default_value)
+}
+
+cpp_new_list <- function(size, default_value) {
+  .Call(`_timeplyr_cpp_new_list`, size, default_value)
+}
+
 cpp_which_ <- function(x, invert) {
   .Call(`_timeplyr_cpp_which_`, x, invert)
 }

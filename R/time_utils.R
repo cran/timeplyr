@@ -58,8 +58,9 @@ unit_parse <- function(x){
                                          text = x))
   }
   num <- as.numeric(num_str)
-  if (length(num) == 0L) num <- 1
-  scale <- 1
+  if (length(num) == 0L) num <- 1L
+  if (is_whole_number(num)) num <- as.integer(num)
+  scale <- 1L
   if (length(num_str) > 0L){
     x <- sub(num_str, "", x, fixed = TRUE) # Remove numbers
   }
@@ -156,28 +157,29 @@ time_by_pretty <- function(time_by){
   }
 }
 # Creates interval even using num
-time_interval <- function(from, to){
+time_interval2 <- function(from, to){
   if (is_time(from) && is_time(to)){
     out <- lubridate::interval(from, to)
   } else {
-    out <- time_diff(from, to, time_by = 1)
+    out <- time_diff(from, to, time_by = 1L)
     if (length(from) < length(out)){
       from <- rep_len(from, length(out))
     }
-    attr(out, "start") <- from
+    # attr(out, "start") <- from
   }
   out
 }
 time_granularity <- function(x, msg = TRUE){
   x <- collapse::funique(x)
   if (length(x) <= 1){
-    gcd_diff <- 1
+    gcd_diff <- 1L
   } else {
     gcd_diff <- abs(gcd_diff(x, round = TRUE))
   }
+  gcd_diff[is.na(gcd_diff)] <- 1
   if (is_date(x)){
     granularity <- "day(s)"
-    scale <- 1
+    scale <- 1L
     unit <- "days"
     num_and_unit <- paste(gcd_diff, unit, sep = " ")
   } else if (is_datetime(x)){
@@ -189,7 +191,7 @@ time_granularity <- function(x, msg = TRUE){
     num_and_unit <- stringr::str_c(gcd_diff, unit, sep = " ")
   } else {
     granularity <- "numeric unit(s)"
-    scale <- 1
+    scale <- 1L
     unit <- "numeric"
     num_and_unit <- gcd_diff
   }
@@ -209,10 +211,11 @@ time_granularity <- function(x, msg = TRUE){
 time_granularity2 <- function(x){
   x <- collapse::funique(x)
   if (length(x) <= 1){
-    gcd_diff <- 1
+    gcd_diff <- 1L
   } else {
     gcd_diff <- abs(gcd_diff(x, round = TRUE))
   }
+  gcd_diff[is.na(gcd_diff)] <- 1
   if (is_date(x)){
     unit <- "days"
     scale <- 1
@@ -222,7 +225,7 @@ time_granularity2 <- function(x){
     scale <- convert_seconds[["scale"]]
   } else {
     unit <- "numeric"
-    scale <- 1
+    scale <- 1L
   }
   add_names(list(gcd_diff / scale), unit)
 }
@@ -529,18 +532,7 @@ duration_unit <- function(units = "seconds"){
          months = lubridate::dmonths,
          years = lubridate::dyears)
 }
-# Functional that returns lubridate period function
-period_unit <- function(units = "seconds"){
-  if (!units %in% .period_units) unit_match_stop(.period_units)
-  switch(units,
-         seconds = lubridate::seconds,
-         minutes = lubridate::minutes,
-         hours = lubridate::hours,
-         days = lubridate::days,
-         weeks = lubridate::weeks,
-         months = months,
-         years = lubridate::years)
-}
+
 numeric_unit <- function(units){
   identity
 }
@@ -611,41 +603,31 @@ time_unit <- function(units, time_type = c("duration", "period", "numeric")){
     period_unit(units)
   }
 }
-# Coerce pair of time based vectors to the most informative
-# class between them
-set_time_cast <- function(x, y){
-  if (identical(parent.frame(n = 1), globalenv())){
-    stop("Users cannot use set_time_cast from the global environment")
-  }
-  xcl <- class(x)
-  ycl <- class(y)
-  # We time cast when either:
-  # * length  of classes differ
-  # * class values differ
-  # We do the length check first to avoid length recycling messages
-  if (
-    ( length(xcl) != length(ycl) ) ||
-    ( sum(xcl != ycl) > 0 )
-  ){
-    x_nm <- simple_deparse(substitute(x))
-    y_nm <- simple_deparse(substitute(y))
-    assign(x_nm, time_cast(x, y), envir = parent.frame(n = 1))
-    assign(y_nm, time_cast(y, x), envir = parent.frame(n = 1))
-  }
-}
 
 # Faster time_cast
 # numeric > yearqtr > yearmon > date > datetime
 # You can move from left to right but not right to left
 time_cast <- function(x, template){
   if (inherits(template, "POSIXt")){
-    if (!inherits(x, c("Date", "POSIXt"))){
-      x <- as.POSIXct(x, origin = lubridate::origin)
+    tzone <- lubridate::tz(template)
+    if (inherits(x, "POSIXt")){
+      if (identical(tzone, lubridate::tz(x))){
+        x
+      } else {
+        lubridate::with_tz(x, tzone = tzone)
+      }
+    } else if (inherits(x, "Date")){
+      lubridate::with_tz(x, tzone = tzone)
+    } else {
+      as.POSIXct(x, tz = tzone, origin = lubridate::origin)
     }
-    lubridate::with_tz(x, tzone = lubridate::tz(template))
-    # as.POSIXct(x, tz = lubridate::tz(template), origin = lubridate::origin)
-  } else if (inherits(template, "Date") && !inherits(x, "POSIXt")){
-    lubridate::as_date(x)
+  } else if (inherits(template, "Date") &&
+             !inherits(x, "POSIXt")){
+    if (is.integer(x)){
+      .Date(x)
+    } else {
+      lubridate::as_date(x)
+    }
   } else if (inherits(template, "yearmon") &&
              !inherits(x, c("POSIXt", "Date"))){
     as_yearmon(x)
@@ -656,6 +638,20 @@ time_cast <- function(x, template){
     x
   }
 }
+
+# Coerce pair of time based vectors to the most informative
+# class between them
+set_time_cast <- function(x, y){
+  if (identical(base::parent.frame(n = 1), base::globalenv())){
+    stop("Users cannot use set_time_cast from the global environment")
+  }
+  if (!identical(class(x), class(y))){
+    x_nm <- simple_deparse(substitute(x))
+    y_nm <- simple_deparse(substitute(y))
+    assign(x_nm, time_cast(x, y), envir = parent.frame(n = 1))
+    assign(y_nm, time_cast(y, x), envir = parent.frame(n = 1))
+  }
+}
 # Faster as_datetime
 as_datetime2 <- function(x){
   if (is_datetime(x)){
@@ -664,31 +660,14 @@ as_datetime2 <- function(x){
     lubridate::as_datetime(x)
   }
 }
-# This bounds start point based on x vector
-bound_from <- function(from, x){
-  x_min <- collapse::fmin(x, na.rm = TRUE,
-                          use.g.names = FALSE)
-  if (is.null(from)){
-    from <- x_min
-  } else {
-    from <- time_cast(from, x) # Cast to as datetime if x is
-    # Bound from by the minimum of x
-    from <- max(x_min, from)
-  }
-  from
+
+# This makes sure start is always <= upper bound
+bound_start <- function(x, bound){
+  pmin(time_cast(x, bound), bound, na.rm = TRUE)
 }
-# This bounds end point based on x vector
-bound_to <- function(to, x){
-  x_max <- collapse::fmax(x, na.rm = TRUE,
-                          use.g.names = FALSE)
-  if (is.null(to)){
-    to <- x_max
-  } else {
-    to <- time_cast(to, x) # Cast to as datetime if x is
-    # Bound to by the maximum of x
-    to <- min(x_max, to)
-  }
-  to
+# This makes sure end is always >= lower bound
+bound_end <- function(x, bound){
+  pmax(time_cast(x, bound), bound, na.rm = TRUE)
 }
 
 fcut_ind <- function(x, breaks, rightmost.closed = FALSE,
@@ -712,53 +691,10 @@ cut_time2 <- function(x, breaks, rightmost.closed = FALSE, left.open = FALSE){
              all.inside = FALSE)
   ]
 }
-# Newer version of cut_time2
-# min(breaks) is expected to be <= min(x)
-# Interval is closed on the left
-# out-of-bounds times can be included in the last interval
-# This can return either break codes or the cut vector
-# cut_time <- function(x, breaks, include_oob = FALSE, codes = FALSE,
-#                      end = NULL){
-#   x <- `attributes<-`(unclass(x), NULL)
-#   breaks_num <- `attributes<-`(unclass(breaks), NULL)
-#   end <- `attributes<-`(unclass(end), NULL) + 1
-#   inf_val <- Inf * (numeric(as.integer(include_oob)) + 1)
-#   breaks_num <- c(breaks_num, end, inf_val)
-#   out <- .bincode(x, breaks = breaks_num, right = FALSE, include.lowest = FALSE)
-#   if (codes){
-#     out
-#   } else {
-#     breaks[out]
-#   }
-# }
+
 cut_time <- function(x, breaks, include_oob = FALSE, codes = FALSE){
-  breaks_num <- unclass(breaks)
-  # Cheeky way of converting FALSE to numeric() and TRUE to Inf without if statement
-  inf_val <- Inf * (numeric(as.integer(include_oob)) + 1)
-  breaks_num <- c(breaks_num, inf_val)
-  out <- .bincode(unclass(x), breaks = breaks_num, right = FALSE, include.lowest = TRUE)
-  if (codes){
-    out
-  } else {
-    breaks[out]
-  }
-}
-# cut_time_intervals <- function(x, breaks, codes = FALSE, end = NULL){
-#   x <- unclass(x)
-#   breaks_num <- unclass(breaks)
-#   end <- unclass(end) + 0
-#   breaks_num <- c(breaks_num, end)
-#   out <- findInterval(x, breaks_num, rightmost.closed = TRUE)
-#   # n_breaks <- length(breaks_num)
-#   # collapse::setv(out, n_breaks, NA_integer_, vind1 = FALSE)
-#   if (codes){
-#     out
-#   } else {
-#     breaks[out]
-#   }
-# }
-is_date_or_utc <- function(x){
-  is_date(x) || lubridate::tz(x) == "UTC"
+  cpp_bin(x, breaks, codes = codes, right = FALSE,
+          include_lowest = TRUE, include_oob = include_oob)
 }
 # Check for date sequences that should not be coerced to datetimes
 is_special_case_days <- function(from, to, unit, num, time_type){
@@ -766,15 +702,6 @@ is_special_case_days <- function(from, to, unit, num, time_type){
     unit %in% c("days", "weeks") &&
     is_date(from) &&
     is_date(to) &&
-    is_whole_number(num)
-}
-is_special_case_utc <- function(from, to, unit, num, time_type){
-  time_type == "auto" &&
-    unit %in% c("days", "weeks") &&
-    is_datetime(from) &&
-    is_datetime(to) &&
-    lubridate::tz(from) == "UTC" &&
-    lubridate::tz(to) == "UTC" &&
     is_whole_number(num)
 }
 # Repeat methods for zoo yearmon and yearqtr class
@@ -822,14 +749,6 @@ as_yearqtr <- function(x){
 is_interval <- function(x){
   isS4(x) && inherits(x, "Interval")
 }
-# time_agg2 <- function(time_seq_data, data, time, g){
-#   by <- dplyr::join_by(!!rlang::sym(g), closest(!!rlang::sym(time) >= !!rlang::sym(time)))
-#   data %>%
-#     dplyr::left_join(time_seq_data, by = by,
-#                      suffix = c(".raw", "")) %>%
-#     dplyr::pull(all_of(stringr::str_c(time, ".raw")))
-#     # dplyr::select(-all_of(stringr::str_c(time, ".raw")))
-# }
 
 # Grouped functions that utilise
 # x - time variable (ascending order)
@@ -861,34 +780,12 @@ is_interval <- function(x){
 
 # Convert time sequence to interval
 tseq_interval <- function(x, seq, gx = NULL, gseq = NULL){
-  out <- time_interval(seq, flag2(seq, n = -1, g = gseq))
+  out <- time_interval2(seq, flag2(seq, n = -1, g = gseq))
   to <- collapse::fmax(x, g = gx, use.g.names = FALSE, na.rm = TRUE)
   end_points <- cpp_which(is.na(out) & !is.na(seq))
-  out[end_points] <- time_interval(seq[end_points], to)
+  out[end_points] <- time_interval2(seq[end_points], to)
   out
 }
-# Interval from x, aggregate x, and seq
-# tagg_interval <- function(xagg, x, seq, gagg = NULL, gx = NULL, gseq = NULL){
-#   int <- tseq_interval(x = x, seq = seq, gx = gx, gseq = gseq)
-#   agg_df <- dplyr::tibble(t = xagg,
-#                           g = gagg)
-#   int_df <- dplyr::tibble(t = seq,
-#                           g = gseq,
-#                           interval = int)
-#   agg_df %>%
-#     dplyr::left_join(int_df, by = c("g", "t"),
-#                      multiple = "any") %>%
-#     fpluck("interval")
-# }
-# Convert time sequence to min max list
-# tseq_min_max <- function(x, seq, gx = NULL, gseq = NULL){
-#   n <- length(x)
-#   end <- flag2(seq, n = max(-1L, -n), g = gseq)
-#   to <- collapse::fmax(x, g = gx, use.g.names = FALSE, na.rm = TRUE)
-#   end_points <- which(is.na(end) & !is.na(seq))
-#   setv(end, end_points, to, vind1 = TRUE)
-#   list(min = seq, max = end)
-# }
 # Time cut levels from ascending time sequence
 tseq_levels <- function(x, seq, gx = NULL, gseq = NULL, fmt = NULL){
   if (is.null(fmt)){
@@ -942,7 +839,8 @@ get_from_to <- function(data, ..., time, from = NULL, to = NULL,
 C_time_add <- getFromNamespace("C_time_add", "timechange")
 time_add2 <- function(x, time_by,
                       time_type = getOption("timeplyr.time_type", "auto"),
-                      roll_month = getOption("timeplyr.roll_month", "preday"), roll_dst = getOption("timeplyr.roll_dst", "boundary")){
+                      roll_month = getOption("timeplyr.roll_month", "preday"),
+                      roll_dst = getOption("timeplyr.roll_dst", "boundary")){
   time_by <- time_by_list(time_by)
   time_num <- time_by_num(time_by)
   time_unit <- time_by_unit(time_by)
@@ -1007,9 +905,7 @@ time_ceiling2 <- function(x, time_by, week_start = getOption("lubridate.week.sta
   }
 }
 tomorrow <- function(){
-  out <- time_as_number(Sys.Date()) + 1
-  class(out) <- "Date"
-  out
+  as_int_date(Sys.Date()) + 1L
 }
 ### All credit goes to the scales package developers for this function
 label_date_short <- function(format = c("%Y", "%b", "%d", "%H:%M"),
@@ -1065,7 +961,8 @@ time_aggregate_left <- function(x, time_by, g = NULL,
                                 time_floor = FALSE,
                                 week_start = getOption("lubridate.week.start", 1),
                                 time_type = getOption("timeplyr.time_type", "auto"),
-                                roll_month = getOption("timeplyr.roll_month", "preday"), roll_dst = getOption("timeplyr.roll_dst", "boundary"),
+                                roll_month = getOption("timeplyr.roll_month", "preday"),
+                                roll_dst = getOption("timeplyr.roll_dst", "boundary"),
                                 as_int = TRUE){
   time_by <- time_by_list(time_by)
   num <- time_by_num(time_by)
@@ -1095,7 +992,7 @@ time_aggregate_left <- function(x, time_by, g = NULL,
                          week_start = week_start)
   }
   tdiff <- time_diff(start, x, time_by = time_by, time_type = time_type)
-  time_to_add <- add_names(list(trunc(tdiff) * num), units)
+  time_to_add <- add_names(list(trunc2(tdiff) * num), units)
   out <- time_add2(start, time_by = time_to_add, time_type = time_type,
                    roll_month = roll_month, roll_dst = roll_dst)
   if (as_int){
@@ -1103,8 +1000,8 @@ time_aggregate_left <- function(x, time_by, g = NULL,
                          roll_month = roll_month, roll_dst = roll_dst)
     set_time_cast(out, int_end)
     end <- time_cast(end, out)
-    which_out_of_bounds <- cpp_which(cppdoubles::double_gt(time_as_number(int_end),
-                                                           time_as_number(end)))
+    which_out_of_bounds <- cpp_which(cppdoubles::double_gt(unclass(int_end),
+                                                           unclass(end)))
     int_end[which_out_of_bounds] <- end[which_out_of_bounds]
     out <- structure(out,
                      end = int_end,
@@ -1119,7 +1016,8 @@ time_aggregate_right <- function(x, time_by, g = NULL,
                                  time_ceiling = FALSE,
                                  week_start = getOption("lubridate.week.start", 1),
                                  time_type = getOption("timeplyr.time_type", "auto"),
-                                 roll_month = getOption("timeplyr.roll_month", "preday"), roll_dst = getOption("timeplyr.roll_dst", "boundary"),
+                                 roll_month = getOption("timeplyr.roll_month", "preday"),
+                                 roll_dst = getOption("timeplyr.roll_dst", "boundary"),
                                  as_int = TRUE){
   time_by <- time_by_list(time_by)
   num <- time_by_num(time_by)
@@ -1149,7 +1047,7 @@ time_aggregate_right <- function(x, time_by, g = NULL,
                            week_start = week_start)
   }
   tdiff <- time_diff(end, x, time_by = time_by, time_type = time_type)
-  time_to_add <- add_names(list(trunc(tdiff) * num), units)
+  time_to_add <- add_names(list(trunc2(tdiff) * num), units)
   out <- time_add2(end, time_by = time_to_add, time_type = time_type,
                    roll_month = roll_month, roll_dst = roll_dst)
   if (as_int){
@@ -1157,15 +1055,14 @@ time_aggregate_right <- function(x, time_by, g = NULL,
                          roll_month = roll_month, roll_dst = roll_dst)
     set_time_cast(out, int_end)
     start <- time_cast(start, out)
-    which_out_of_bounds <- cpp_which(cppdoubles::double_lt(time_as_number(int_end),
-                                                           time_as_number(start)))
+    which_out_of_bounds <- cpp_which(cppdoubles::double_lt(unclass(int_end),
+                                                           unclass(start)))
     int_end[which_out_of_bounds] <- start[which_out_of_bounds]
     out <- structure(out,
                      end = int_end,
                      direction = "right-to-left")
   }
   out
-  # class = c("time_int", class(out)))
 }
 time_int_end <- function(x){
   attr(x, "end")
@@ -1175,13 +1072,18 @@ time_int_rm_attrs <- function(x){
   attr(x, "direction") <- NULL
   x
 }
+
+# This is great but can't handle when start > end and the direction of
+# the time_by argument is positive
+
 # Time aggregation using expanded sequences from data directly
 time_aggregate_expand <- function(x, time_by, g = NULL,
                                   start = NULL, end = NULL,
                                   time_floor = FALSE,
                                   week_start = getOption("lubridate.week.start", 1),
                                   time_type = getOption("timeplyr.time_type", "auto"),
-                                  roll_month = getOption("timeplyr.roll_month", "preday"), roll_dst = getOption("timeplyr.roll_dst", "boundary"),
+                                  roll_month = getOption("timeplyr.roll_month", "preday"),
+                                  roll_dst = getOption("timeplyr.roll_dst", "boundary"),
                                   as_int = TRUE){
   time_by <- time_by_list(time_by)
   num <- time_by_num(time_by)
@@ -1235,20 +1137,13 @@ time_aggregate_expand <- function(x, time_by, g = NULL,
                                n_groups = n_groups,
                                group_sizes = seq_sizes)
   x <- time_cast(x, time_full)
-  # group_ends <- cumsum(collapse::GRPN(group_id, expand = FALSE))
   if (no_groups){
     out <- cut_time(x, time_full, include_oob = TRUE)
   } else {
-    time_list <- collapse::gsplit(time_as_number(x), g = g)
-    time_full_list <- collapse::gsplit(time_as_number(time_full), g = g2)
-    out <- vector("list", n_groups)
-    for (i in seq_len(n_groups)){
-      ti <- .bincode(.subset2(time_list, i),
-                     breaks = c(.subset2(time_full_list, i), Inf),
-                     include.lowest = FALSE, right = FALSE)
-      out[[i]] <- .subset(.subset2(time_full_list, i), ti)
-    }
-    out <- unlist(out, recursive = FALSE, use.names = FALSE)
+    out <- bin_grouped(x, gx = g,
+                       breaks = time_full, gbreaks = g2,
+                       right = FALSE, include_lowest = FALSE,
+                       codes = FALSE, include_oob = TRUE)
     out <- collapse::greorder(out, g = g)
   }
   out <- time_cast(out, time_full)
@@ -1272,72 +1167,81 @@ time_aggregate_expand <- function(x, time_by, g = NULL,
 # * Expansion size is less than 10 million
 # * Number of groups are less than 1m
 # And using time differencing otherwise
-time_aggregate_switch <- function(x, time_by, time_type,
-                                  g = NULL,
-                                  start = NULL, end = NULL,
-                                  time_floor = FALSE,
-                                  week_start = getOption("lubridate.week.start", 1),
-                                  roll_month = getOption("timeplyr.roll_month", "preday"),
-                                  roll_dst = getOption("timeplyr.roll_dst", "boundary"),
-                                  as_int = TRUE){
-  check_is_time_or_num(x)
-  time_by <- time_by_list(time_by)
-  num <- time_by_num(time_by)
-  units <- time_by_unit(time_by)
-  check_time_by_length_is_one(time_by)
-  time_type <- match_time_type(time_type)
-  g <- GRP2(g, return.groups = FALSE)
-  if (is.null(g)){
-    n_groups <- min(1L, length(x))
-  } else {
-    n_groups <- GRP_n_groups(g)
-  }
-  ###
-  if (is.null(start)){
-    from <- collapse::fmin(x, g = g, use.g.names = FALSE, na.rm = TRUE)
-  } else {
-    from <- collapse::ffirst(start, g = g, use.g.names = FALSE)
-  }
-  if (is.null(end)){
-    to <- collapse::fmax(x, g = g, use.g.names = FALSE, na.rm = TRUE)
-  } else {
-    to <- collapse::ffirst(end, g = g, use.g.names = FALSE)
-  }
-  # Make sure from/to are datetimes if x is datetime
-  from <- time_cast(from, x)
-  to <- time_cast(to, x)
-  time_span_sizes <- time_seq_sizes(from = from, to = to,
-                                    time_by = time_by,
-                                    time_type = time_type)
-  ###
-  if (time_type == "auto"){
-    time_type <- guess_seq_type(units)
-  }
-  if (time_type == "period" &&
-      n_groups < 1e06 &&
-      sum(time_span_sizes) < 1e07 &&
-      length(x) > 1e05){
-    time_aggregate_expand(x, g = g, time_by = time_by,
-                          start = start,
-                          end = end,
-                          time_type = time_type,
-                          roll_month = roll_month,
-                          roll_dst = roll_dst,
-                          time_floor = time_floor,
-                          week_start = week_start,
-                          as_int = as_int)
-  } else {
-    time_aggregate_left(x, g = g, time_by = time_by,
-                        start = start,
-                        end = end,
-                        time_type = time_type,
-                        roll_month = roll_month,
-                        roll_dst = roll_dst,
-                        time_floor = time_floor,
-                        week_start = week_start,
-                        as_int = as_int)
-  }
-}
+# time_aggregate_switch <- function(x, time_by, time_type,
+#                                   g = NULL,
+#                                   start = NULL, end = NULL,
+#                                   time_floor = FALSE,
+#                                   week_start = getOption("lubridate.week.start", 1),
+#                                   roll_month = getOption("timeplyr.roll_month", "preday"),
+#                                   roll_dst = getOption("timeplyr.roll_dst", "boundary"),
+#                                   as_int = TRUE){
+#   check_is_time_or_num(x)
+#   time_by <- time_by_list(time_by)
+#   num <- time_by_num(time_by)
+#   units <- time_by_unit(time_by)
+#   check_time_by_length_is_one(time_by)
+#   time_type <- match_time_type(time_type)
+#   g <- GRP2(g, return.groups = FALSE)
+#   if (is.null(g)){
+#     n_groups <- min(1L, length(x))
+#   } else {
+#     n_groups <- GRP_n_groups(g)
+#   }
+#   if (is.null(start)){
+#     from <- collapse::fmin(x, g = g, use.g.names = FALSE, na.rm = TRUE)
+#   } else {
+#     from <- collapse::ffirst(start, g = g, use.g.names = FALSE)
+#   }
+#   if (is.null(end)){
+#     to <- collapse::fmax(x, g = g, use.g.names = FALSE, na.rm = TRUE)
+#   } else {
+#     to <- collapse::ffirst(end, g = g, use.g.names = FALSE)
+#   }
+#   # Make sure from/to are datetimes if x is datetime
+#   from <- time_cast(from, x)
+#   to <- time_cast(to, x)
+#   time_span_sizes <- time_seq_sizes(from = from, to = to,
+#                                     time_by = time_by,
+#                                     time_type = time_type)
+#   expanded_size <- sum(time_span_sizes)
+#   # if (time_type == "auto"){
+#   #   time_type <- guess_seq_type(units)
+#   # }
+#   if (
+#       (
+#         # Convoluted because I don't want to overwrite time_type
+#         # If it is set to auto
+#         (identical(time_type, "period") ||
+#          (time_type == "auto" && guess_seq_type(units) == "period") ) &&
+#      n_groups < 1e06 &&
+#      expanded_size < 1e07 &&
+#      length(x) > 1e05)  ||
+#     (
+#       n_groups < 1e04 &&
+#       expanded_size < 1e06
+#     )
+#   ){
+#     time_aggregate_expand(x, g = g, time_by = time_by,
+#                           start = start,
+#                           end = end,
+#                           time_type = time_type,
+#                           roll_month = roll_month,
+#                           roll_dst = roll_dst,
+#                           time_floor = time_floor,
+#                           week_start = week_start,
+#                           as_int = as_int)
+#   } else {
+#     time_aggregate_left(x, g = g, time_by = time_by,
+#                         start = start,
+#                         end = end,
+#                         time_type = time_type,
+#                         roll_month = roll_month,
+#                         roll_dst = roll_dst,
+#                         time_floor = time_floor,
+#                         week_start = week_start,
+#                         as_int = as_int)
+#   }
+# }
 check_is_date <- function(x){
   if (!is_date(x)){
     stop(paste(deparse1(substitute(x)),
@@ -1352,8 +1256,6 @@ check_is_datetime <- function(x){
 }
 check_is_time <- function(x){
   if (!is_time(x)){
-    # Alternative and better way for future errors.
-    # cli::cli_abort("{.x {x}} must be a date or datetime")
     stop(paste(deparse1(substitute(x)),
                 "must be a date or datetime"))
   }
@@ -1367,7 +1269,7 @@ check_is_time_or_num <- function(x){
 # Turn date storage into integer
 as_int_date <- function(x){
   check_is_date(x)
-  out <- as.integer(unclass(x))
+  out <- as.integer(x)
   class(out) <- "Date"
   out
 }
@@ -1400,75 +1302,60 @@ multiply_single_unit_period_by_number <- function(per, num){
   per_num <- per_num * num
   per_length <- length(per_num)
   per_num[cpp_which(is.nan(per_num))] <- NA_real_
-  other_fill <- numeric(per_length)
-  other_fill[cpp_which(is.na(per_num))] <- NA_real_
+  other_fill <- integer(per_length)
+  other_fill[cpp_which(is.na(per_num))] <- NA_integer_
   switch(
     per_unit,
     years = {
       per@year <- per_num
-      # if (recycle){
        per@month <- other_fill
        per@day <- other_fill
        per@hour <- other_fill
        per@minute <- other_fill
        per@.Data <- other_fill
-      # }
     },
     months = {
       per@month <- per_num
-      # if (recycle){
         per@year <- other_fill
         per@day <- other_fill
         per@hour <- other_fill
         per@minute <- other_fill
         per@.Data <- other_fill
-      # }
     },
     days = {
       per@day <- per_num
-      # if (recycle){
         per@year <- other_fill
         per@month <- other_fill
         per@hour <- other_fill
         per@minute <- other_fill
         per@.Data <- other_fill
-      # }
     },
     hours = {
       per@hour <- per_num
-      # if (recycle){
         per@year <- other_fill
         per@month <- other_fill
         per@day <- other_fill
         per@minute <- other_fill
         per@.Data <- other_fill
-      # }
     },
     minutes = {
       per@minute <- per_num
-      # if (recycle){
         per@year <- other_fill
         per@month <- other_fill
         per@day <- other_fill
         per@hour <- other_fill
         per@.Data <- other_fill
-      # }
     },
     seconds = {
       per@.Data <- per_num
-      # if (recycle){
         per@year <- other_fill
         per@month <- other_fill
         per@day <- other_fill
         per@hour <- other_fill
         per@minute <- other_fill
-      # }
     }
   )
-  # attr(per, per_unit) <- per_num
-  # slot(per, per_unit) <- per_num
   per
-  # period_unit(per_unit)(per_num * num)
 }
 
 rep_single_unit_period <- function(per, ...){
@@ -1477,7 +1364,7 @@ rep_single_unit_period <- function(per, ...){
   per_num <- time_by_num(per_list)
   per_unit <- time_by_unit(per_list)
   per_num <- rep(per_num, ...)
-  other_fill <- numeric(length(per_num))
+  other_fill <- integer(length(per_num))
   switch(
     per_unit,
     years = {
@@ -1689,4 +1576,5 @@ int_to_per <- function (start, end){
   per$year[wnegs] <- -per$year[wnegs]
   per
 }
+
 

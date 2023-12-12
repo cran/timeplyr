@@ -162,7 +162,8 @@ time_roll_sum <- function(x, window = Inf,
                           close_left_boundary = FALSE,
                           na.rm = TRUE,
                           time_type = getOption("timeplyr.time_type", "auto"),
-                          roll_month = getOption("timeplyr.roll_month", "preday"), roll_dst = getOption("timeplyr.roll_dst", "boundary"),
+                          roll_month = getOption("timeplyr.roll_month", "preday"),
+                          roll_dst = getOption("timeplyr.roll_dst", "boundary"),
                           ...){
   check_is_time_or_num(time)
   check_time_not_missing(time)
@@ -220,12 +221,11 @@ time_roll_sum <- function(x, window = Inf,
                           roll_month = roll_month,
                           roll_dst = roll_dst)
   naive_window <- sequence(group_sizes)
-
-  adj_window <- fbincode(time_as_number(time_start),
-                         breaks = time_as_number(time),
-                         gx = sorted_g,
-                         gbreaks = sorted_g,
-                         right = close_left_boundary)
+  adj_window <- bin_grouped(time_start, breaks = time,
+                                 gx = sorted_g,
+                                 gbreaks = sorted_g,
+                                 right = close_left_boundary,
+                                 codes = TRUE)
   adj_window[collapse::whichNA(adj_window)] <- 0L
   final_window <- naive_window - adj_window
   # if (lag != 0){
@@ -265,7 +265,8 @@ time_roll_mean <- function(x, window = Inf,
                            close_left_boundary = FALSE,
                            na.rm = TRUE,
                            time_type = getOption("timeplyr.time_type", "auto"),
-                           roll_month = getOption("timeplyr.roll_month", "preday"), roll_dst = getOption("timeplyr.roll_dst", "boundary"),
+                           roll_month = getOption("timeplyr.roll_month", "preday"),
+                           roll_dst = getOption("timeplyr.roll_dst", "boundary"),
                            ...){
   check_is_time_or_num(time)
   check_time_not_missing(time)
@@ -323,11 +324,12 @@ time_roll_mean <- function(x, window = Inf,
   } else {
     sorted_g <- NULL
   }
-  adj_window <- fbincode(time_as_number(time_start),
-                         breaks = time_as_number(time),
-                         gx = sorted_g,
-                         gbreaks = sorted_g,
-                         right = close_left_boundary)
+  adj_window <- bin_grouped(time_start,
+                                 breaks = time,
+                                 gx = sorted_g,
+                                 gbreaks = sorted_g,
+                                 right = close_left_boundary,
+                                 codes = TRUE)
   adj_window[collapse::whichNA(adj_window)] <- 0L
   final_window <- naive_window - adj_window
   # if (lag != 0){
@@ -366,7 +368,8 @@ time_roll_growth_rate <- function(x, window = Inf,
                                   close_left_boundary = FALSE,
                                   na.rm = TRUE,
                                   time_type = getOption("timeplyr.time_type", "auto"),
-                                  roll_month = getOption("timeplyr.roll_month", "preday"), roll_dst = getOption("timeplyr.roll_dst", "boundary")){
+                                  roll_month = getOption("timeplyr.roll_month", "preday"),
+                                  roll_dst = getOption("timeplyr.roll_dst", "boundary")){
   check_time_not_missing(time)
   check_is_time_or_num(time)
   window <- time_by_get(time, time_by = window)
@@ -421,11 +424,12 @@ time_roll_growth_rate <- function(x, window = Inf,
                           roll_dst = roll_dst)
   naive_window <- sequence(group_sizes)
 
-  adj_window <- fbincode(time_as_number(time_start),
-                         breaks = time_as_number(time),
-                         gx = sorted_g,
-                         gbreaks = sorted_g,
-                         right = close_left_boundary)
+  adj_window <- bin_grouped(time_start,
+                                 breaks = time,
+                                 gx = sorted_g,
+                                 gbreaks = sorted_g,
+                                 right = close_left_boundary,
+                                 codes = TRUE)
   adj_window[collapse::whichNA(adj_window)] <- 0L
   final_window <- naive_window - adj_window
   if (is.null(time_step)){
@@ -470,7 +474,7 @@ time_roll_growth_rate <- function(x, window = Inf,
       }
     }
     lag_window <- final_window - 1L
-    x_lagged <- roll_lag(x, lag = lag_window, check = FALSE)
+    x_lagged <- roll_lag(x, lag_window)
     if (na.rm){
       lag_window <- data.table::frollsum(!is.na(x), n = lag_window,
                                            adaptive = partial,
@@ -482,8 +486,8 @@ time_roll_growth_rate <- function(x, window = Inf,
   } else {
     time_step <- time_by_list(time_step)
     lag_window <- final_window - 1L
-    x_lagged <- roll_lag(x, lag = lag_window, check = FALSE)
-    time_lagged <- roll_lag(time, lag = lag_window, check = FALSE)
+    x_lagged <- roll_lag(x, lag_window)
+    time_lagged <- roll_lag(time, lag_window)
     time_differences <- time_diff(time_lagged, time,
                                   time_by = time_step,
                                   time_type = time_type)
@@ -521,7 +525,8 @@ time_roll_window_size <- function(time, window = Inf,
                                   partial = TRUE,
                                   close_left_boundary = FALSE,
                                   time_type = getOption("timeplyr.time_type", "auto"),
-                                  roll_month = getOption("timeplyr.roll_month", "preday"), roll_dst = getOption("timeplyr.roll_dst", "boundary")){
+                                  roll_month = getOption("timeplyr.roll_month", "preday"),
+                                  roll_dst = getOption("timeplyr.roll_dst", "boundary")){
   check_is_time_or_num(time)
   check_time_not_missing(time)
   window <- time_by_list(window)
@@ -562,11 +567,12 @@ time_roll_window_size <- function(time, window = Inf,
       out <- integer(length(time))
     }
   } else {
-    adj_window <- fbincode(time_as_number(start),
-                           breaks = time_as_number(time),
-                           gx = g,
-                           gbreaks = g,
-                           right = close_left_boundary)
+    adj_window <- bin_grouped(start,
+                              breaks = time,
+                              gx = g,
+                              gbreaks = g,
+                              right = close_left_boundary,
+                              codes = TRUE)
     which_na <- collapse::whichNA(adj_window)
     adj_window[which_na] <- 0L
     out <- naive_window - adj_window
@@ -595,7 +601,8 @@ time_roll_window <- function(x, window = Inf, time = seq_along(x),
                              partial = TRUE,
                              close_left_boundary = FALSE,
                              time_type = getOption("timeplyr.time_type", "auto"),
-                             roll_month = getOption("timeplyr.roll_month", "preday"), roll_dst = getOption("timeplyr.roll_dst", "boundary")){
+                             roll_month = getOption("timeplyr.roll_month", "preday"),
+                             roll_dst = getOption("timeplyr.roll_dst", "boundary")){
   window_widths <- time_roll_window_size(time, window = window,
                                          g = g,
                                          partial = partial,
@@ -616,7 +623,8 @@ time_roll_apply <- function(x, window = Inf, fun,
                             unlist = FALSE,
                             close_left_boundary = FALSE,
                             time_type = getOption("timeplyr.time_type", "auto"),
-                            roll_month = getOption("timeplyr.roll_month", "preday"), roll_dst = getOption("timeplyr.roll_dst", "boundary")){
+                            roll_month = getOption("timeplyr.roll_month", "preday"),
+                            roll_dst = getOption("timeplyr.roll_dst", "boundary")){
   stopifnot(is.function(fun))
   sizes <- time_roll_window_size(time,
                                  window = window,

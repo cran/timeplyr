@@ -68,8 +68,7 @@ floored before building the sequence?}
 means Monday (default), 7 means Sunday.
 This is only used when \code{time_floor = TRUE}.}
 
-\item{n_at_most}{Logical. If \code{TRUE} then n breaks at most are returned,
-otherwise at least n breaks are returned.}
+\item{n_at_most}{\bold{Deprecated}. No longer used.}
 
 \item{as_factor}{Logical. If \code{TRUE} the output is an ordered factor.
 Setting this to \code{FALSE} is sometimes much faster.}
@@ -93,6 +92,8 @@ In both cases it is the same length as \code{x}.
 \description{
 \code{time_cut()} is very useful for plotting with dates and datetimes
 and always returns breaks of regular width. \cr
+}
+\details{
 To specify exact widths, similar to \code{ggplot2::cut_width()},
 supply \code{time_by} and \code{n = Inf}. \cr
 \code{time_breaks()} is a helper that
@@ -100,12 +101,25 @@ returns only the time breaks.
 
 By default \code{time_cut()} will try to find
 the prettiest way of cutting the interval by
-trying to cut the date/datetimes into
+trying to cut the date/date-times into
 groups of the highest possible time units,
 starting at years and ending at milliseconds.
-If \code{n_at_most = TRUE} then \verb{<= n} groups are calculated,
-otherwise \verb{>= n} groups
-are calculated.
+
+When \code{x} is a numeric vector, \code{time_cut} will behave similar to \code{time_cut}
+except for 3 things:
+\itemize{
+\item The intervals are all right open and equal width, except for the
+rightmost interval which is closed with width <= the other widths.
+\item The left value of the leftmost interval is always \code{min(x)}.
+\item Up to \code{n} breaks are created, i.e \verb{<= n} breaks. This is to prioritise
+pretty breaks.
+}
+
+\code{time_cut} is a generalisation of \code{time_summarisev} such that the
+below identity should always hold:
+\preformatted{
+ identical(time_cut(x, n = Inf, as_factor = FALSE), time_summarisev(x))
+}
 }
 \examples{
 library(timeplyr)
@@ -118,10 +132,12 @@ library(dplyr)
 data.table::setDTthreads(threads = 2L)
 collapse::set_collapse(nthreads = 1L)
 }
+time_cut(1:10, n = 5)
 # Easily create custom time breaks
 df <- nycflights13::flights \%>\%
-  fslice_sample(n = 10^3, seed = 8192821) \%>\%
+  fslice_sample(n = 10, seed = 8192821) \%>\%
   select(time_hour) \%>\%
+  farrange(time_hour) \%>\%
   mutate(date = as_date(time_hour))
 
 # time_cut() and time_breaks() automatically find a
@@ -131,10 +147,22 @@ time_cut(df$date)
 time_cut(df$time_hour, n = 5) # <= 5 breaks
 # Custom formatting
 time_cut(df$date, fmt = "\%Y \%b", time_by = "month")
-time_cut(df$time_hour, fmt = "\%Y \%b", time_by = "month")
 # Just the breaks
 time_breaks(df$date, n = 5, time_by = "month")
-time_breaks(df$time_hour, n = 5, time_by = "month")
+
+cut_dates <- time_cut(df$date)
+date_breaks <- time_breaks(df$date)
+
+# Grouping each interval into the start of its interval
+identical(date_breaks[group_id(cut_dates)],
+          time_cut(df$date, as_factor = FALSE))
+
+# WHen n = Inf and as_factor = FALSE, it should be equivalent to using
+# time_aggregate or time_summarisev
+identical(time_cut(df$date, n = Inf, time_by = "month", as_factor = FALSE),
+          time_summarisev(df$date, time_by = "month"))
+identical(time_summarisev(df$date, time_by = "month"),
+          time_aggregate(df$date, time_by = "month"))
 
 # To get exact breaks at regular intervals, use time_expandv
 weekly_breaks <- time_expandv(df$date,

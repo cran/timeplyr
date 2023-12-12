@@ -2,27 +2,9 @@
 % Please edit documentation in R/time_summarise.R
 \name{time_summarise}
 \alias{time_summarise}
-\alias{time_reframe}
-\title{A time based extension to \code{dplyr::summarise()}/\code{dplyr::reframe()}}
+\title{A time based extension to \code{dplyr::summarise()}}
 \usage{
 time_summarise(
-  data,
-  time = NULL,
-  ...,
-  time_by = NULL,
-  from = NULL,
-  to = NULL,
-  time_type = getOption("timeplyr.time_type", "auto"),
-  include_interval = FALSE,
-  .by = NULL,
-  time_floor = FALSE,
-  week_start = getOption("lubridate.week.start", 1),
-  roll_month = getOption("timeplyr.roll_month", "preday"),
-  roll_dst = getOption("timeplyr.roll_dst", "boundary"),
-  sort = TRUE
-)
-
-time_reframe(
   data,
   time = NULL,
   ...,
@@ -104,11 +86,6 @@ A summarised \code{data.frame}.
 This works much the same as \code{dplyr::summarise()}, except that
 you can supply an additional \code{time} argument to allow for
 aggregating time to a higher unit.
-
-Currently, this does \bold{not} support
-filling in missing gaps in time. \cr
-Use \code{time_count()} or \code{time_complete()}
-before using this if you believe there may be gaps in time.
 }
 \examples{
 library(timeplyr)

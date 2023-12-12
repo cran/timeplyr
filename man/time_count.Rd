@@ -2,8 +2,7 @@
 % Please edit documentation in R/time_count.R
 \name{time_count}
 \alias{time_count}
-\title{Fast count, fill implicit missing gaps, and (time)
-aggregate a time series based data frame.}
+\title{Fast count time at higher time units.}
 \usage{
 time_count(
   data,
@@ -12,7 +11,7 @@ time_count(
   time_by = NULL,
   from = NULL,
   to = NULL,
-  complete = TRUE,
+  complete = FALSE,
   wt = NULL,
   name = NULL,
   sort = FALSE,
@@ -49,9 +48,9 @@ then arithmetic is used, e.g \code{time_by = 1}.
 
 \item{to}{Time series end date. If \code{NULL} then max time is used.}
 
-\item{complete}{Logical. If \code{TRUE} implicit gaps in time are filled
-after counting and time aggregation (through \code{time_by}).
-The default is \code{TRUE}.}
+\item{complete}{\bold{Deprecated}.
+Use \code{time_complete()} after \code{time_count()} to
+complete missing gaps in time (as well as optionally expand groups).}
 
 \item{wt}{Frequency weights.
 \code{dplyr} "data-masking" is used for variable selection.
@@ -99,8 +98,7 @@ The rightmost interval will always be closed.}
 }
 \value{
 An object of class \code{data.frame}
-containing the input time variable
-which is expanded for each supplied group.
+containing the aggregate time variable and corresponding counts.
 }
 \description{
 This function operates like \code{dplyr::count()}
@@ -114,21 +112,10 @@ can be aggregated to
 both lower and higher time units.
 
 An important note is that when the data are grouped, time ranges are expanded
-on a group-by-group basis. This works like dplyr where you can supply either a
-grouped_df or specify the groupings through \code{.by}.
+on a group-by-group basis. \cr
 When groups are supplied through
-\code{...}, the time range of the entire data is used for
-the expansion of each group.
-Depending on the analysis, this may or may not be what you want
-and can sometimes result in huge expansions if dealing with time variables
-with large span sizes.
-
-If \code{complete = TRUE} then the gaps in the time are expanded.
-
-To avoid filling in missing gaps in time, as well as possible expansion,
-simply set \code{complete = FALSE}
-which will simply perform a count
-across your aggregated time variable and specified groups.
+\code{...}, the time range of the entire data is used
+to aggregate the time variable.
 }
 \examples{
 library(timeplyr)
@@ -142,9 +129,8 @@ data.table::setDTthreads(threads = 2L)
 collapse::set_collapse(nthreads = 1L)
 }
 df <- flights \%>\%
-  mutate(date = as_date(time_hour),
-         date_num = as.integer(date)) \%>\%
-  select(year, month, day, origin, dest, date, time_hour, date_num)
+  mutate(date = as_date(time_hour)) \%>\%
+  select(year, month, day, origin, dest, date, time_hour)
 
 # By default time_count() guesses the time granularity
 df \%>\%

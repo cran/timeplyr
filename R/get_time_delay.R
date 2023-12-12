@@ -96,7 +96,7 @@
 #' collapse::set_collapse(nthreads = .n_collapse_threads)
 #'}
 #' @export
-get_time_delay <- function(data, origin, end, time_by = 1,
+get_time_delay <- function(data, origin, end, time_by = 1L,
                            time_type = getOption("timeplyr.time_type", "auto"),
                            min_delay = -Inf, max_delay = Inf,
                            probs = c(0.25, 0.5, 0.75, 0.95),
@@ -105,16 +105,25 @@ get_time_delay <- function(data, origin, end, time_by = 1,
                            bw = "SJ",
                            ...){
   group_vars <- get_groups(data, {{ .by }})
-  out <- data %>%
-    mutate2(!!enquo(origin),
-            !!enquo(end),
-            .by = {{ .by }},
-            .keep = "none")
-  start_time <- tidy_transform_names(data, !!enquo(origin))
-  end_time <- tidy_transform_names(data, !!enquo(end))
-  out <- as_DT(out)
+  origin_info <- mutate_summary_grouped(data,
+                                        !!enquo(origin),
+                                        .by = {{ .by }},
+                                        .keep = "none")
+  end_info <- mutate_summary_grouped(data,
+                                     !!enquo(end),
+                                     .by = {{ .by }},
+                                     .keep = "none")
+  origin <- origin_info[["cols"]]
+  end <- end_info[["cols"]]
+  check_length(origin, 1)
+  check_length(end, 1)
+  start_time <- origin
+  end_time <- end
+  origin_df <- safe_ungroup(origin_info[["data"]])
+  end_df <- fselect(safe_ungroup(end_info[["data"]]), .cols = end)
+  out <- data.table::copy(collapse::qDT(vctrs::vec_cbind(origin_df, end_df)))
   grp_nm <- new_var_nm(out, ".group.id")
-  out[, (grp_nm) := group_id(data, .by = {{ .by }})]
+  set_add_cols(out, add_names(list(group_id(data, .by = {{ .by }})), grp_nm))
   set_rm_cols(out, setdiff(names(out),
                            c(grp_nm, group_vars, start_time, end_time)))
   grp_df <- fdistinct(fselect(out, .cols = c(grp_nm, group_vars)),
@@ -124,9 +133,15 @@ get_time_delay <- function(data, origin, end, time_by = 1,
   by_unit <- time_by_unit(time_by)
   by_n <- time_by_num(time_by)
   delay_nm <- new_var_nm(out, "delay")
-  out[, (delay_nm) := time_diff(get(start_time), get(end_time),
-                                time_by = time_by,
-                                time_type = time_type)]
+  set_add_cols(out, add_names(
+    list(
+      time_diff(out[[start_time]],
+                out[[end_time]],
+                time_by = time_by,
+                time_type = time_type)
+    ),
+    delay_nm
+  ))
   n_miss_delays <- num_na(out[[delay_nm]])
   if (n_miss_delays > 0){
     warning(paste(n_miss_delays, "missing observations will be
@@ -136,7 +151,6 @@ get_time_delay <- function(data, origin, end, time_by = 1,
   # Remove outliers
   out <- out[cpp_which(data.table::between(get(delay_nm), min_delay, max_delay,
                                  incbounds = TRUE, NAbounds = NA)), ]
-  out <- out[cpp_which(is.na(get(delay_nm)), TRUE), ]
   # Quantile summary
   iqr_p_missed <- setdiff(c(0.25, 0.75), probs)
   if (length(iqr_p_missed) > 0L){
@@ -151,7 +165,7 @@ get_time_delay <- function(data, origin, end, time_by = 1,
                                   .by = all_of(grp_nm),
                                   stat = c("n", "min", "max",
                                            "mean", "sd"),
-                                  sort = TRUE,
+                                  sort = FALSE,
                                   q_probs = probs)
   delay_summary[, ("se") := get("sd")/sqrt(get("n"))]
   delay_summary[, ("iqr") := get("p75") - get("p25")]
@@ -160,23 +174,21 @@ get_time_delay <- function(data, origin, end, time_by = 1,
     delay_summary[grp_df, (group_vars) := mget(group_vars),
                   on = grp_nm, allow.cartesian = FALSE]
   }
-  delay_summary <- farrange(delay_summary, .cols = grp_nm)
+  setorderv2(delay_summary, cols = grp_nm)
   set_rm_cols(delay_summary, c(grp_nm, iqr_p_missed))
   delay_summary <- fselect(delay_summary, .cols = c(group_vars, "n", "min",
                                                     "max", "mean", "sd",
                                                     q_nms, "iqr", "se"))
   # Create delay table
-  min_delay <- max(min(out[[delay_nm]]),
-                   min_delay)
+  min_delay <- max(min(out[[delay_nm]]), min_delay)
   min_delay <- min_delay[!is.infinite(min_delay)]
-  max_delay <- min(max(out[[delay_nm]]),
-                   max_delay)
+  max_delay <- min(max(out[[delay_nm]]), max_delay)
   max_delay <- max_delay[!is.infinite(max_delay)]
   if (length(min_delay) == 0 || length(max_delay) == 0){
-    delay_tbl <- new_tbl(delay = numeric(0),
-                         n = integer(0),
-                         cumulative = integer(0),
-                         edf = numeric(0))
+    delay_tbl <- new_tbl(delay = numeric(),
+                         n = integer(),
+                         cumulative = integer(),
+                         edf = numeric())
   } else {
     delay_tbl <- out %>%
       fcount(across(all_of(c(grp_nm, group_vars))),

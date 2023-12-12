@@ -40,38 +40,39 @@ calendar <- function(x, label = TRUE,
                      week_start = getOption("lubridate.week.start", 1),
                      fiscal_start = getOption("lubridate.fiscal.start", 1),
                      name = "time"){
-  time_seq <- convert_common_dates(x)
-  year <- as.integer(lubridate::year(time_seq))
-  quarter <- as.integer(lubridate::quarter(time_seq,
+  dates <- convert_common_dates(x)
+  time_info <- as.POSIXlt(dates)
+  year <- time_info$year + 1900L
+  quarter <- as.integer(lubridate::quarter(time_info,
                                            type = "quarter",
                                            fiscal_start = fiscal_start))
-  month <- as.integer(lubridate::month(time_seq))
-  week <- as.integer(lubridate::week(time_seq))
-  day <- as.integer(lubridate::day(time_seq))
-  yday <- as.integer(lubridate::yday(time_seq))
-  isoyear <- as.integer(lubridate::isoyear(time_seq))
-  isoweek <- as.integer(lubridate::isoweek(time_seq))
-  isoday <- isoday(time_seq)
-  epiyear <- as.integer(lubridate::epiyear(time_seq))
-  epiweek <- as.integer(lubridate::epiweek(time_seq))
-  wday <- as.integer(lubridate::wday(time_seq, week_start = week_start))
+  month <- time_info$mon + 1L
+  week <- as.integer(lubridate::week(time_info))
+  day <- time_info$mday
+  yday <- time_info$yday
+  isoyear <- as.integer(lubridate::isoyear(time_info))
+  isoweek <- as.integer(lubridate::isoweek(time_info))
+  isoday <- isoday(time_info)
+  epiyear <- as.integer(lubridate::epiyear(time_info))
+  epiweek <- as.integer(lubridate::epiweek(time_info))
+  wday <- as.integer(lubridate::wday(time_info, week_start = week_start))
   out_nms <- c(name, "year", "quarter", "month",
                "month_l", "week", "day", "yday", "isoyear",
                "isoweek", "isoday", "epiyear", "epiweek",
                "wday", "wday_l",
                "hour", "minute", "second")
   if (label){
-    wday_l <- lubridate::wday(time_seq, week_start = week_start, label = TRUE)
-    month_l <- lubridate::month(time_seq, label = TRUE, abbr = TRUE)
+    wday_l <- lubridate::wday(time_info, week_start = week_start, label = TRUE)
+    month_l <- lubridate::month(time_info, label = TRUE, abbr = TRUE)
   } else {
     wday_l <- NULL
     month_l <- NULL
     out_nms <- setdiff(out_nms, c("wday_l", "month_l"))
   }
-  if (is_datetime(time_seq)){
-    hour <- lubridate::hour(time_seq)
-    minute <- lubridate::minute(time_seq)
-    second <- lubridate::second(time_seq)
+  if (is_datetime(dates)){
+    hour <- time_info$hour
+    minute <- time_info$min
+    second <- time_info$sec
   } else {
     hour <- NULL
     minute <- NULL
@@ -91,7 +92,7 @@ add_calendar <- function(data, time = NULL, label = TRUE,
                          week_start = getOption("lubridate.week.start", 1),
                          fiscal_start = getOption("lubridate.fiscal.start", 1)){
   if (rlang::quo_is_null(enquo(time))){
-    time_vars <- tidy_select_names(data, dplyr::where(is_time))
+    time_vars <- names(data)[cpp_which(vapply(data, is_time, FALSE))]
     if (length(time_vars) == 0) {
       stop("Please specify a time variable")
     } else {
@@ -99,8 +100,7 @@ add_calendar <- function(data, time = NULL, label = TRUE,
       message(paste0("Using ", time_var))
     }
   } else {
-    data <- mutate2(data, !!enquo(time))
-    time_var <- tidy_transform_names(data, !!enquo(time))
+    time_var <- tidy_select_names(data, !!enquo(time))
   }
   calendar <- fselect(calendar(data[[time_var]], label = label, week_start = week_start,
                        fiscal_start = fiscal_start), .cols = -1L)

@@ -1,12 +1,18 @@
 #' Faster `dplyr::slice()`
 #'
-#' @description When there are lots of groups, the `fslice()` functions are much faster.
+#' @description
+#' When there are lots of groups, the `fslice()` functions are much faster.
 #'
 #' @details
 #' `fslice()` and friends allow for more flexibility in how you order the by-group slicing. \cr
 #' Furthermore, you can control whether the returned data frame is sliced in
 #' the order of the supplied row indices, or whether the
 #' original order is retained (like `dplyr::filter()`).
+#'
+#' In `fslice()`, when `length(n) == 1`, an optimised method is implemented
+#' that internally uses `list_subset()`, a fast function for extracting
+#' single elements from single-level lists that contain vectors of the same
+#' type, e.g. integer.
 #'
 #' `fslice_head()` and `fslice_tail()` are very fast with large numbers of groups.
 #'
@@ -83,21 +89,21 @@
 fslice <- function(data, ..., .by = NULL,
                    keep_order = FALSE, sort_groups = TRUE){
   dots <- list(...)
-  N <- df_nrow(data)
   n <- unlist(dots, recursive = TRUE, use.names = FALSE)
-  if (length(n) == 0L) n <- 0L
-  n_rng <- collapse::frange(n)
-  sum_n_rng <- sum(n_rng)
-  if (abs(sum_n_rng) != sum(abs(n_rng))){
+  N <- df_nrow(data)
+  if (length(n) == 0L){
+    n <- 0L
+  }
+  rng <- collapse::frange(n, na.rm = FALSE)
+  rng_sum <- sum(sign(1 / rng))
+  if (abs(rng_sum) != 2){
     stop("Can't mix negative and positive locations")
   }
-  # range_sign <- sign(sum(sign(1/n_rng))) # This can deal with -0
-  range_sign <- sign(sum_n_rng)
-  n <- as.integer(n)
+  slice_sign <- sign(rng_sum)
   # Groups
   group_vars <- get_groups(data, .by = {{ .by }})
   if (length(group_vars) == 0L){
-    if (any(abs(n_rng) > N)){
+    if (any(abs(rng) > N)){
       i <- n[cpp_which(data.table::between(n, -N, N))]
     } else {
       i <- n
@@ -113,7 +119,7 @@ fslice <- function(data, ..., .by = NULL,
     n <- n[cpp_which(data.table::between(n, -GN, GN))]
     rows <- group_df[[".loc"]]
     row_lens <- group_df[[".size"]]
-    if (range_sign >= 1){
+    if (slice_sign >= 1){
       size <- pmin.int(max(n), row_lens)
     } else {
       size <- pmax.int(0L, row_lens - max(abs(n)))
@@ -124,12 +130,17 @@ fslice <- function(data, ..., .by = NULL,
       row_lens <- row_lens[keep]
       size <- size[keep]
     }
-    i <- vector("list", length(rows))
-    for (j in seq_along(i)){
-      i[[j]] <- .subset(.subset2(rows, j),
-                        .subset(n, cpp_which(n <= .subset2(row_lens, j))))
+    if (length(n) == 1 && slice_sign >= 1){
+      i <- list_subset(rows, n)
+      i <- i[cpp_which(is.na(i), invert = TRUE)]
+    } else {
+      i <- vector("list", length(rows))
+      for (j in seq_along(i)){
+        i[[j]] <- .subset(.subset2(rows, j),
+                          .subset(n, cpp_which(n <= .subset2(row_lens, j))))
+      }
+      i <- unlist(i, use.names = FALSE, recursive = FALSE)
     }
-    i <- unlist(i, use.names = FALSE, recursive = FALSE)
     if (is.null(i)){
       i <- integer(0)
     }
@@ -281,10 +292,10 @@ fslice_max <- function(data, order_by, ..., n, prop, .by = NULL,
 }
 #' @rdname fslice
 #' @export
-fslice_sample <- function(data, ..., n, prop,
+fslice_sample <- function(data, n, replace = FALSE, prop,
                           .by = NULL,
                           keep_order = FALSE, sort_groups = TRUE,
-                          replace = FALSE, weights = NULL, seed = NULL){
+                          weights = NULL, seed = NULL){
   # Check if a seed already exists in global environment
   seed_exists <- exists(".Random.seed")
   # Save it in the first instance
@@ -293,7 +304,6 @@ fslice_sample <- function(data, ..., n, prop,
   }
   # Does user want to use local seed?
   seed_is_null <- is.null(seed)
-  rlang::check_dots_empty0(...)
   has_weights <- !rlang::quo_is_null(enquo(weights))
   if (has_weights){
     data <- mutate2(data, !!enquo(weights))

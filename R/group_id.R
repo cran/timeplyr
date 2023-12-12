@@ -208,10 +208,10 @@ group_id.data.frame <- function(data, ...,
                                 .by = NULL, .cols = NULL,
                                 as_qg = FALSE){
   N <- df_nrow(data)
-  group_info <- group_info(data, ..., .by = {{ .by }},
-                           .cols = .cols,
-                           ungroup = TRUE,
-                           rename = FALSE)
+  group_info <- tidy_group_info(data, ..., .by = {{ .by }},
+                                .cols = .cols,
+                                ungroup = TRUE,
+                                rename = FALSE)
   all_groups <- group_info[["all_groups"]]
   # Usual Method for when data does not contain interval
   if (length(all_groups) == 0L){
@@ -261,10 +261,10 @@ group_id.grouped_df <- function(data, ...,
                             ordered = order)
     }
   } else {
-    group_info <- group_info(data, ..., .by = {{ .by }},
-                             .cols = .cols,
-                             ungroup = TRUE,
-                             rename = FALSE)
+    group_info <- tidy_group_info(data, ..., .by = {{ .by }},
+                                  .cols = .cols,
+                                  ungroup = TRUE,
+                                  rename = FALSE)
     all_groups <- group_info[["all_groups"]]
     out <- group_id(group_info[["data"]], .cols = all_groups,
                     order = order, ascending = ascending,
@@ -328,10 +328,10 @@ row_id.data.frame <- function(data, ...,
                               ascending = TRUE,
                               .by = NULL, .cols = NULL){
   N <- df_nrow(data)
-  group_info <- group_info(data, ..., .by = {{ .by }},
-                           .cols = .cols,
-                           ungroup = TRUE,
-                           rename = FALSE)
+  group_info <- tidy_group_info(data, ..., .by = {{ .by }},
+                                .cols = .cols,
+                                ungroup = TRUE,
+                                rename = FALSE)
   data <- group_info[["data"]]
   vars <- group_info[["all_groups"]]
   if (length(vars) == 0L){
@@ -401,10 +401,10 @@ group_order.Interval <- function(data, ..., ascending = TRUE){
 group_order.data.frame <- function(data, ..., ascending = TRUE,
                                    .by = NULL, .cols = NULL){
   N <- df_nrow(data)
-  group_info <- group_info(data, ..., .by = {{ .by }},
-                           .cols = .cols,
-                           ungroup = TRUE,
-                           rename = FALSE)
+  group_info <- tidy_group_info(data, ..., .by = {{ .by }},
+                                .cols = .cols,
+                                ungroup = TRUE,
+                                rename = FALSE)
   all_groups <- group_info[["all_groups"]]
   if (length(all_groups) == 0L){
     if (ascending){
@@ -415,8 +415,7 @@ group_order.data.frame <- function(data, ..., ascending = TRUE,
                      by = -1L)
     }
   } else {
-    out <- radixorderv2(collapse::fselect(group_info[["data"]],
-                                                     all_groups),
+    out <- radixorderv2(fselect(group_info[["data"]], .cols = all_groups),
                                    decreasing = !ascending,
                                    na.last = TRUE, starts = FALSE,
                                    group.sizes = FALSE, sort = TRUE)
@@ -438,46 +437,7 @@ add_group_order <- function(data, ..., ascending = TRUE,
                                                           ascending = ascending)),
                                          .name))
 }
-# group_sort <- function(data, ..., ascending = TRUE, .by = NULL){
-#   UseMethod("group_sort")
-# }
-# group_sort.default <- function(data, ..., ascending = TRUE, .by = NULL){
-#   gorder <- group_order.default(data, ascending = ascending)
-#   if (is_strictly_increasing(gorder)){
-#     data
-#   } else {
-#     vctrs::vec_slice(data, gorder)
-#   }
-# }
-# group_sort.data.frame <- function(data, ..., ascending = TRUE, .by = NULL){
-#   n_dots <- dots_length(...)
-#   out <- safe_ungroup(data)
-#   group_vars <- get_groups(data, .by = {{  .by }})
-#   if (n_dots > 0){
-#     out <- mutate2(out, ...)
-#     dot_vars <- tidy_transform_names(out, ...)
-#     group_vars <- c(group_vars, dot_vars)
-#   }
-#   gorder <- group_order.default(collapse::fselect(out, group_vars),
-#                         ascending = ascending)
-#   if (length(group_vars) == 0L || is_strictly_increasing(gorder)){
-#     data
-#   } else {
-#     vctrs::vec_slice(data, gorder)
-#   }
-# }
-group2 <- function(X, ...){
-  if (is.null(X)){
-    return(NULL)
-  }
-  if (is_interval(X)){
-    X <- interval_separate(X)
-  }
-  if (is.list(X) && list_has_interval(X)){
-    X <- mutate_intervals_to_ids(X)
-  }
-  collapse::group(X, ...)
-}
+
 qG2 <- function(x, sort = TRUE, ordered = FALSE, na.exclude = FALSE, ...){
   if (is_interval(x)){
     if (na.exclude){
@@ -510,10 +470,10 @@ qG2 <- function(x, sort = TRUE, ordered = FALSE, na.exclude = FALSE, ...){
   out
 }
 # Mutate interval columns to group IDs
-mutate_intervals_to_ids <- function(data){
-  which_int <- which(list_item_is_interval(data))
+mutate_intervals_to_ids <- function(data, order = TRUE){
+  which_int <- cpp_which(list_item_is_interval(data))
   for (i in seq_along(which_int)){
-    data[[.subset2(which_int, i)]] <- group_id.Interval(.subset2(data, .subset2(which_int, i)))
+    data[[.subset2(which_int, i)]] <- group_id.Interval(.subset2(data, .subset2(which_int, i)), order = order)
   }
   data
 }
