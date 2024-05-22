@@ -183,7 +183,7 @@ roll_growth <- function(x, window = 1,
   } else {
     roll <- function(...) frollmean3(...)
   }
-  x_na <- cpp_which(is.na(x))
+  x_na <- cheapr::which_na(x)
   has_na <- length(x_na) > 0
   if (!is.null(weights) && has_na){
     weights[x_na] <- NA_real_
@@ -194,7 +194,7 @@ roll_growth <- function(x, window = 1,
   if (partial){
     window <- window_sequence(length(x), window, partial = TRUE)
     # Partial window is shifted according to lag value
-    window_lagged <- flag2(window, lag)
+    window_lagged <- roll_lag(window, lag)
     # Running mean with lagged partial window
     numerator <- roll(x = x, n = window_lagged, weights = weights,
                       align = "right",
@@ -203,21 +203,21 @@ roll_growth <- function(x, window = 1,
                              align = "right",
                              na.rm = na.rm, adaptive = TRUE, ...)
     # Lagged running mean as denominator
-    denominator <- flag2(roll(x = x, n = window, weights = weights,
+    denominator <- roll_lag(roll(x = x, n = window, weights = weights,
                               align = "right", na.rm = na.rm,
                               adaptive = TRUE, ...), lag)
-    offset_denominator <- flag2(roll(x = offset, n = window, weights = weights,
+    offset_denominator <- roll_lag(roll(x = offset, n = window, weights = weights,
                                      align = "right", na.rm = na.rm,
                                      adaptive = TRUE, ...), lag)
   } else {
     numerator <- roll(x = x, n = window, weights = weights,
                       align = "right", na.rm = na.rm,
                       adaptive = FALSE, ...)
-    denominator <- flag2(numerator, lag)
+    denominator <- roll_lag(numerator, lag)
     offset_numerator <- roll(x = offset, n = window, weights = weights,
                              align = "right", na.rm = na.rm,
                              adaptive = FALSE, ...)
-    offset_denominator <- flag2(offset_numerator, lag)
+    offset_denominator <- roll_lag(offset_numerator, lag)
   }
   if (log){
     if (!is.null(offset)){
@@ -237,11 +237,11 @@ roll_growth <- function(x, window = 1,
     # Growth of value compared to lagged value
     growth <- numerator / denominator
     # 0/0 = NaN and assume 0 to 0 events represents no growth, i.e GR = 1.
-    growth[cpp_which(numerator == 0 & denominator == 0)] <- 1
+    growth[which_(numerator == 0 & denominator == 0)] <- 1
   }
   # NA/0 remains NA
   if (!is.null(inf_fill)){
-    growth[cpp_which(is.infinite(growth))] <- inf_fill
+    growth[which_(is.infinite(growth))] <- inf_fill
   }
   growth
 }

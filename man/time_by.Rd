@@ -10,16 +10,13 @@
 time_by(
   data,
   time,
-  time_by_unit = NULL,
+  time_by = NULL,
   from = NULL,
   to = NULL,
-  .name = "{.col}",
+  .name = paste0("time_intv_", time_by_pretty(time_by, "_")),
   .add = FALSE,
   time_type = getOption("timeplyr.time_type", "auto"),
-  time_floor = FALSE,
-  week_start = getOption("lubridate.week.start", 1),
-  roll_month = getOption("timeplyr.roll_month", "preday"),
-  roll_dst = getOption("timeplyr.roll_dst", "boundary"),
+  as_interval = getOption("timeplyr.use_intervals", FALSE),
   .time_by_group = TRUE
 )
 
@@ -35,7 +32,7 @@ time_by_units(x)
 \item{time}{Time variable (\bold{data-masking}). \cr
 Can be a \code{Date}, \code{POSIXt}, \code{numeric}, \code{integer}, \code{yearmon}, or \code{yearqtr}.}
 
-\item{time_by_unit}{Time unit. \cr
+\item{time_by}{Time unit. \cr
 Must be one of the following:
 \itemize{
 \item string, specifying either the unit or the number and unit, e.g
@@ -61,28 +58,14 @@ strings to the time column name or replace it.}
 Default is \code{FALSE}.}
 
 \item{time_type}{If "auto", \code{periods} are used for
-the time expansion when days, weeks,
+the time aggregation when days, weeks,
 months or years are specified, and \code{durations}
 are used otherwise. If \code{durations}
-are used the output is always of class \code{POSIXt}.}
+are used the output is always of class \code{POSIXct}.}
 
-\item{time_floor}{Should the start of each time sequence
-be floored to
-the nearest unit specified through the \code{time_by}
-argument? This is particularly useful for
-starting sequences at the beginning of a week
-or month for example.}
-
-\item{week_start}{day on which week starts following ISO conventions - 1
-means Monday (default), 7 means Sunday.
-This is only used when \code{time_floor = TRUE}.}
-
-\item{roll_month}{Control how impossible dates are handled when
-month or year arithmetic is involved.
-Options are "preday", "boundary", "postday", "full" and "NA".
-See \code{?timechange::time_add} for more details.}
-
-\item{roll_dst}{See \code{?timechange::time_add} for the full list of details.}
+\item{as_interval}{Should time variable be a \code{time_interval}?
+Default is \code{FALSE}. \cr
+This can be controlled globally through \code{options(timeplyr.use_intervals)}.}
 
 \item{.time_by_group}{Should the time aggregations be built on a
 group-by-group basis (the default), or should the time variable be aggregated
@@ -122,7 +105,7 @@ time_by_span(hourly_flights)
 monthly_flights <- flights \%>\%
   time_by(time_hour, "month")
 weekly_flights <- flights \%>\%
-  time_by(time_hour, "week", time_floor = TRUE)
+  time_by(time_hour, "week", from = floor_date(min(time_hour), "week"))
 
 monthly_flights \%>\%
   count()
@@ -130,12 +113,11 @@ monthly_flights \%>\%
 weekly_flights \%>\%
   summarise(n = n(), arr_delay = mean(arr_delay, na.rm = TRUE))
 
-# To aggregate multiple variables, use time_aggregate or time_summarisev
-
+# To aggregate multiple variables, use time_aggregate
 
 flights \%>\%
   select(time_hour) \%>\%
-  mutate(across(everything(), \(x) time_summarisev(x, time_by = dweeks(1)))) \%>\%
+  mutate(across(everything(), \(x) time_aggregate(x, time_by = "weeks"))) \%>\%
   count(time_hour)
 \dontshow{
 data.table::setDTthreads(threads = .n_dt_threads)

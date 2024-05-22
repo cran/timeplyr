@@ -102,7 +102,7 @@ get_time_delay <- function(data, origin, end, time_by = 1L,
                            probs = c(0.25, 0.5, 0.75, 0.95),
                            .by = NULL,
                            include_plot = TRUE, x_scales = "fixed",
-                           bw = "SJ",
+                           bw = "sj",
                            ...){
   group_vars <- get_groups(data, {{ .by }})
   origin_info <- mutate_summary_grouped(data,
@@ -121,7 +121,7 @@ get_time_delay <- function(data, origin, end, time_by = 1L,
   end_time <- end
   origin_df <- safe_ungroup(origin_info[["data"]])
   end_df <- fselect(safe_ungroup(end_info[["data"]]), .cols = end)
-  out <- data.table::copy(collapse::qDT(vctrs::vec_cbind(origin_df, end_df)))
+  out <- df_as_dt(df_cbind(origin_df, end_df))
   grp_nm <- new_var_nm(out, ".group.id")
   set_add_cols(out, add_names(list(group_id(data, .by = {{ .by }})), grp_nm))
   set_rm_cols(out, setdiff(names(out),
@@ -142,15 +142,16 @@ get_time_delay <- function(data, origin, end, time_by = 1L,
     ),
     delay_nm
   ))
-  n_miss_delays <- num_na(out[[delay_nm]])
+  n_miss_delays <- na_count(out[[delay_nm]])
   if (n_miss_delays > 0){
     warning(paste(n_miss_delays, "missing observations will be
                   removed before calculation.",
                   sep = " "))
   }
   # Remove outliers
-  out <- out[cpp_which(data.table::between(get(delay_nm), min_delay, max_delay,
-                                 incbounds = TRUE, NAbounds = NA)), ]
+  out <- cheapr::sset(out,
+                      data.table::between(out[[delay_nm]], min_delay, max_delay,
+                                          incbounds = TRUE, NAbounds = NA))
   # Quantile summary
   iqr_p_missed <- setdiff(c(0.25, 0.75), probs)
   if (length(iqr_p_missed) > 0L){
@@ -166,7 +167,8 @@ get_time_delay <- function(data, origin, end, time_by = 1L,
                                   stat = c("n", "min", "max",
                                            "mean", "sd"),
                                   sort = FALSE,
-                                  q_probs = probs)
+                                  q_probs = probs,
+                                  inform_stats = FALSE)
   delay_summary[, ("se") := get("sd")/sqrt(get("n"))]
   delay_summary[, ("iqr") := get("p75") - get("p25")]
   if (length(group_vars) > 0L){
@@ -194,7 +196,6 @@ get_time_delay <- function(data, origin, end, time_by = 1L,
       fcount(across(all_of(c(grp_nm, group_vars))),
              across(all_of(delay_nm), ceiling),
              name = "n")
-    data.table::setDT(delay_tbl)
     delay_tbl[, ("cumulative") := collapse::fcumsum(get("n"),
                                                     g = get(grp_nm),
                                                     na.rm = TRUE)]

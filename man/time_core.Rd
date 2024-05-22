@@ -62,7 +62,7 @@ time_summarisev(
   week_start = getOption("lubridate.week.start", 1),
   roll_month = getOption("timeplyr.roll_month", "preday"),
   roll_dst = getOption("timeplyr.roll_dst", "boundary"),
-  include_interval = FALSE
+  as_interval = getOption("timeplyr.use_intervals", FALSE)
 )
 
 time_countv(
@@ -74,11 +74,11 @@ time_countv(
   unique = TRUE,
   complete = FALSE,
   time_type = getOption("timeplyr.time_type", "auto"),
-  include_interval = FALSE,
   time_floor = FALSE,
   week_start = getOption("lubridate.week.start", 1),
   roll_month = getOption("timeplyr.roll_month", "preday"),
-  roll_dst = getOption("timeplyr.roll_dst", "boundary")
+  roll_dst = getOption("timeplyr.roll_dst", "boundary"),
+  as_interval = getOption("timeplyr.use_intervals", FALSE)
 )
 
 time_span_size(
@@ -95,7 +95,8 @@ time_span_size(
 }
 \arguments{
 \item{x}{Time variable. \cr
-Can be a \code{Date}, \code{POSIXt}, \code{numeric}, \code{integer}, \code{yearmon}, or \code{yearqtr}.}
+Can be a \code{Date}, \code{POSIXt}, \code{numeric}, \code{integer}, \code{yearmon}, \code{yearqtr},
+\code{year_month} or \code{year_quarter}.}
 
 \item{time_by}{Time unit. \cr
 Must be one of the following:
@@ -145,10 +146,9 @@ See \code{?timechange::time_add} for more details.}
 \item{unique}{Should the result be unique or match the length of the vector?
 Default is \code{TRUE}.}
 
-\item{include_interval}{Logical. If \code{TRUE} then the result is a \code{tibble}
-with a column "interval" of the form \verb{time_min <= x < time_max}
-showing the time interval in which the aggregated time points belong to.
-The rightmost interval will always be closed.}
+\item{as_interval}{Should result be a \code{time_interval}?
+Default is \code{FALSE}. \cr
+This can be controlled globally through \code{options(timeplyr.use_intervals)}.}
 
 \item{complete}{Logical. If \code{TRUE} implicit gaps in time are filled
 before counting and after time aggregation (controlled using \code{time_by}).
@@ -185,7 +185,7 @@ time_num_gaps(x)
 time_span_size(x) - length(unique(x))
 
 # Time sequence that spans the data
-time_span(x) # Automatically detects hour granularity
+length(time_span(x)) # Automatically detects hour granularity
 time_span(x, time_by = "month")
 time_span(x, time_by = list("quarters" = 1),
              to = today(),
@@ -200,9 +200,9 @@ identical(y[!y \%in\% x], time_gaps(x))
 time_summarisev(y, time_by = "quarter")
 time_summarisev(y, time_by = "quarter", unique = TRUE)
 flights \%>\%
-  fcount(quarter_start = time_summarisev(time_hour, "quarter"))
+  fcount(quarter = time_summarisev(time_hour, "quarter"))
 # Alternatively
-time_countv(x, time_by = "quarter")
+time_countv(flights$time_hour, time_by = "quarter")
 # If you want the above as an atomic vector just use tibble::deframe
 \dontshow{
 data.table::setDTthreads(threads = .n_dt_threads)

@@ -1,3 +1,29 @@
+# timeplyr 0.8.0
+
+* `roll_diff` has been simplified and gains a new argument `differences` 
+to allow for recursive differencing.
+
+* `roll_lag` has been simplified. It internally utilises cheapr's `lag2_` with the recursive argument always set to `TRUE`.
+
+* `time_aggregate` no longer accepts a group `g` argument.
+
+* Removed some unnecessary arguments from `time_by`.
+
+* Deprecated most of the data frame specific `time_` functions, with the exception of
+`time_by`, `time_episodes`, `time_expand` and `time_complete`.
+
+* Internal bug fix for period time differences. 
+
+* `time_aggregate` gains the `from`, `to`, `time_floor` and `week_start` arguments.
+
+* Moved much of the C++ functionality to the cheapr package, which is on CRAN.
+
+* `roll_na_fill` can now also handle data frames.
+
+* `time_episodes` has a custom print method displaying key summary metrics.
+
+* New class `time_interval` to represent right-open time intervals. 
+
 # timeplyr 0.5.0
 
 * The internal code of `time_cut` has been simplified and improved. 

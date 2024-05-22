@@ -47,7 +47,7 @@ fselect <- function(data, ..., .cols = NULL){
 fselect.data.frame <- function(data, ..., .cols = NULL){
   pos <- tidy_select_pos(data, ..., .cols = .cols)
   # out <- collapse::ss(data, j = unname(pos), check = FALSE)
-  out <- df_select(data, unname(pos))
+  out <- df_select(data, pos)
   names(out) <- names(pos)
   out
 }
@@ -83,13 +83,14 @@ fselect.grouped_df <- function(data, ..., .cols = NULL){
   out <- df_select(safe_ungroup(data), unname(pos))
   names(out) <- names(pos)
   attr(out, "groups") <- groups
-  class(out) <- c("grouped_df", "tbl_df", "tbl", "data.frame")
+  class(out) <- class(data)
+  # class(out) <- c("grouped_df", "tbl_df", "tbl", "data.frame")
   out
 }
 #' @export
 fselect.data.table <- function(data, ..., .cols = NULL){
   pos <- tidy_select_pos(data, ..., .cols = .cols)
-  out <- df_select(data, unname(pos))
+  out <- df_select(data, pos)
   names(out) <- names(pos)
   invisible(
     data.table::setalloccol(out, n = getOption("datatable.alloccol", 1000L))
@@ -110,28 +111,27 @@ frename.data.frame <- function(data, ..., .cols = NULL){
 frename.grouped_df <- function(data, ..., .cols = NULL){
   pos <- tidy_select_pos(data, ..., .cols = .cols)
   groups <- group_data(data)
-  group_vars <- setdiff(names(groups), ".rows")
+  group_vars <- setdiff2(names(groups), ".rows")
   # Rename data columns
   out <- col_rename(safe_ungroup(data), .cols = pos)
   # Rename group data columns
-  group_pos <- cpp_which(group_vars %in% names(data)[pos])
-  names(group_pos) <- names(out)[cpp_which(names(out) %in% names(pos) &
+  group_pos <- which_(group_vars %in% names(data)[pos])
+  names(group_pos) <- names(out)[which_(names(out) %in% names(pos) &
                                              names(data) %in% group_vars)]
   groups <- col_rename(groups, .cols = group_pos)
   attr(out, "groups") <- groups
-  class(out) <- c("grouped_df", "tbl_df", "tbl", "data.frame")
+  class(out) <- class(data)
+  # class(out) <- c("grouped_df", "tbl_df", "tbl", "data.frame")
   out
 }
 # This should be unecessary but data.table:::`names<-.data.table`
 # Sometimes reduces the allocated column slots
 #' @export
 frename.data.table <- function(data, ..., .cols = NULL){
-  out_allocated_length <- data.table::truelength(data) - collapse::fncol(data)
-  out_allocated_length <- max(out_allocated_length, 0L)
   pos <- tidy_select_pos(data, ..., .cols = .cols)
   data <- col_rename(data, .cols = pos)
   invisible(
-    data.table::setalloccol(data, n = out_allocated_length)
+    data.table::setalloccol(data, n = getOption("datatable.alloccol", 1000L))
   )
   data
 }

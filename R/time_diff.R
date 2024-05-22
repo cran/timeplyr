@@ -47,8 +47,12 @@
 #' library(bench)
 #'
 #' # Period differences are much faster
+#' # check = FALSE because the results are fractionally different.
+#' # lubridate:::adjust_estimate likely has a typo in the first while loop
+#'
 #' mark(timeplyr = time_diff(flights$time_hour, today(), "weeks", time_type = "period"),
-#'      lubridate = interval(flights$time_hour, today()) / weeks(1))
+#'      lubridate = interval(flights$time_hour, today()) / weeks(1),
+#'      check = FALSE)
 #' }
 #' \dontshow{
 #' data.table::setDTthreads(threads = .n_dt_threads)
@@ -68,7 +72,6 @@ time_diff <- function(x, y, time_by = 1L,
     if (!is.numeric(x)){
       x <- time_as_number(x)
     }
-    # out <- (y - x) / num
     out <- divide(y - x, num)
   } else {
     time_type <- match_time_type(time_type)
@@ -85,7 +88,6 @@ time_diff <- function(x, y, time_by = 1L,
       }
       by <- num
       out <- divide(time_as_number(y) - time_as_number(x), by)
-      # out <- (time_as_number(y) - time_as_number(x)) / by
       return(out)
     }
     if (time_type == "auto"){
@@ -96,7 +98,7 @@ time_diff <- function(x, y, time_by = 1L,
     if (time_type == "period"){
       # Use distinct start/end pairs (intervals)
       # Instead of all of them because it's usually more efficient
-      interval_tbl <- list_to_data_frame(recycle_args(x = x, y = y, num = num))
+      interval_tbl <- new_df(x = x, y = y, num = num, .recycle = TRUE)
       interval_groups <- collapse::group(interval_tbl, starts = TRUE, group.sizes = TRUE)
       starts <- attr(interval_groups, "starts")
       sizes <- attr(interval_groups, "group.sizes")
@@ -112,8 +114,8 @@ time_diff <- function(x, y, time_by = 1L,
 
       unit <- period_unit(units)(abs(num))
       out <- sign(num) * divide_interval_by_period2(x, y, unit)
-      out[cpp_which(num == 0 & x > y)] <- -Inf
-      out[cpp_which(num == 0 & x < y)] <- Inf
+      out[which_(num == 0 & x > y)] <- -Inf
+      out[which_(num == 0 & x < y)] <- Inf
       # Expand them back to original length
       if (distinct_pairs){
         out <- out[interval_groups]

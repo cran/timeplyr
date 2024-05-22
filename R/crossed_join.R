@@ -15,8 +15,7 @@
 #' @param strings_as_factors Should strings be converted to factors before
 #' expansion? The default is `FALSE` but setting to `TRUE` can offer
 #' a significant speed improvement.
-#' @param log_limit The maximum log10 limit for expanded number of rows.
-#' Anything >= this results in an error.
+#'
 #' @details An important note is that currently `NA`s
 #' are sorted last and therefore a key is not set.
 #'
@@ -40,24 +39,18 @@
 #' @export
 crossed_join <- function(X, sort = FALSE, unique = TRUE,
                          as_dt = TRUE,
-                         strings_as_factors = FALSE,
-                         log_limit = 8){
+                         strings_as_factors = FALSE){
   x_nms <- names(X)
   if (unique){
     X <- lapply(X, function(x) collapse::funique(x, sort = sort))
   } else {
     X <- as.list(X)
   }
-  expanded_n <- prod(collapse::vlengths(X, use.names = FALSE))
-  expand_check(expanded_n, log_limit)
+  expanded_n <- prod(cheapr::lengths_(X))
   if (strings_as_factors){
-    is_chr <- vapply(X, is.character, FALSE, USE.NAMES = FALSE)
-    which_chr <- which(is_chr)
+    which_chr <- which_(vapply(X, is.character, FALSE, USE.NAMES = FALSE))
     X[which_chr] <- lapply(X[which_chr],
-                           function(x) collapse::qF(x,
-                                                    sort = FALSE,
-                                                    ordered = FALSE,
-                                                    na.exclude = TRUE))
+                           function(x) cheapr::factor_(x, order = FALSE))
   }
   # out <- .Call(Ccj, X)
   # do.call(CJ, args = c(X, list(sorted = FALSE, unique = FALSE)))

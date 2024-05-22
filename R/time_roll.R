@@ -220,32 +220,33 @@ time_roll_sum <- function(x, window = Inf,
   time_start <- time_add2(time, time_by = time_subtract,
                           roll_month = roll_month,
                           roll_dst = roll_dst)
-  naive_window <- sequence(group_sizes)
+  time_window <- sequence(group_sizes)
   adj_window <- bin_grouped(time_start, breaks = time,
                                  gx = sorted_g,
                                  gbreaks = sorted_g,
                                  right = close_left_boundary,
                                  codes = TRUE)
-  adj_window[collapse::whichNA(adj_window)] <- 0L
-  final_window <- naive_window - adj_window
+  adj_window[cheapr::which_na(adj_window)] <- 0L
+  time_window <- cheapr::set_subtract(time_window, adj_window)
   # if (lag != 0){
   #   x <- flag2(x, n = lag, g = sorted_g)
   #   final_window <- flag2(final_window, n = lag, g = sorted_g)
   #   weights <- flag2(weights, n = lag, g = sorted_g)
   # }
-  out <- frollsum3(x, n = final_window,
+  out <- frollsum3(x, n = time_window,
                    weights = weights,
                    adaptive = TRUE, align = "right",
                    na.rm = na.rm, ...)
   if (!partial){
-    elapsed <- time_elapsed(time, time_by = unit_time_by,
-                            g = sorted_g, rolling = FALSE)
+    elapsed <- abs(
+      time_elapsed(time, time_by = unit_time_by, g = sorted_g, rolling = FALSE)
+    ) + 1
     if (close_left_boundary){
-      is_partial <- cppdoubles::double_lte(abs(elapsed) + 1, time_num)
+      is_partial <- cppdoubles::double_lte(elapsed, time_num)
     } else {
-      is_partial <- cppdoubles::double_lt(abs(elapsed) + 1, time_num)
+      is_partial <- cppdoubles::double_lt(elapsed, time_num)
     }
-    out[cpp_which(is_partial)] <- NA_real_
+    out[which_(is_partial)] <- NA_real_
   }
   # For duplicate times, we take the last value of each duplicate
   out <- glast(out, g = sorted_g2)
@@ -270,9 +271,6 @@ time_roll_mean <- function(x, window = Inf,
                            ...){
   check_is_time_or_num(time)
   check_time_not_missing(time)
-  # if (length(lag) != 1L){
-  #   stop("lag must be of length 1")
-  # }
   window <- time_by_get(time, time_by = window)
   time_num <- time_by_num(window)
   time_unit <- time_by_unit(window)
@@ -330,26 +328,22 @@ time_roll_mean <- function(x, window = Inf,
                                  gbreaks = sorted_g,
                                  right = close_left_boundary,
                                  codes = TRUE)
-  adj_window[collapse::whichNA(adj_window)] <- 0L
+  adj_window[cheapr::which_na(adj_window)] <- 0L
   final_window <- naive_window - adj_window
-  # if (lag != 0){
-  #   x <- flag2(x, n = lag, g = sorted_g)
-  #   final_window <- flag2(final_window, n = lag, g = sorted_g)
-  #   weights <- flag2(weights, n = lag, g = sorted_g)
-  # }
   out <- frollmean3(x, n = final_window,
                     weights = weights,
                     adaptive = TRUE, align = "right",
                     na.rm = na.rm, ...)
   if (!partial){
-    elapsed <- time_elapsed(time, time_by = unit_time_by,
-                            g = sorted_g, rolling = FALSE)
+    elapsed <- abs(
+      time_elapsed(time, time_by = unit_time_by, g = sorted_g, rolling = FALSE)
+    ) + 1
     if (close_left_boundary){
-      is_partial <- cppdoubles::double_lte(abs(elapsed) + 1, time_num)
+      is_partial <- cppdoubles::double_lte(elapsed, time_num)
     } else {
-      is_partial <- cppdoubles::double_lt(abs(elapsed) + 1, time_num)
+      is_partial <- cppdoubles::double_lt(elapsed, time_num)
     }
-    out[cpp_which(is_partial)] <- NA_real_
+    out[which_(is_partial)] <- NA_real_
   }
   # For duplicate times, we take the last mean value of each duplicate
   out <- glast(out, g = sorted_g2)
@@ -414,8 +408,6 @@ time_roll_growth_rate <- function(x, window = Inf,
     sorted_g <- sorted_group_id_to_GRP(group_id,
                                        n_groups = n_groups,
                                        group_sizes = group_sizes)
-                                       # groups = GRP_groups(g),
-                                       # group.vars = GRP_group_vars(g))
   } else {
     sorted_g <- NULL
   }
@@ -430,7 +422,7 @@ time_roll_growth_rate <- function(x, window = Inf,
                                  gbreaks = sorted_g,
                                  right = close_left_boundary,
                                  codes = TRUE)
-  adj_window[collapse::whichNA(adj_window)] <- 0L
+  adj_window[cheapr::which_na(adj_window)] <- 0L
   final_window <- naive_window - adj_window
   if (is.null(time_step)){
     # Check first for gaps in time
@@ -441,7 +433,7 @@ time_roll_growth_rate <- function(x, window = Inf,
                               use.g.names = TRUE)
     if (sum(has_gaps) > 0){
       if (has_groups){
-        group_ids <- cpp_which(has_gaps)
+        group_ids <- which_(has_gaps)
         if (is.null(names(has_gaps))){
           groups_with_gaps <- group_ids
           group_sub_msg <- "in group ID:"
@@ -482,7 +474,7 @@ time_roll_growth_rate <- function(x, window = Inf,
                                            align = "right")
     }
     out <- ( (x / x_lagged) ^ (1 / (lag_window)) )
-    out[cpp_which(x == 0 & x_lagged == 0)] <- 1
+    out[which_(x == 0 & x_lagged == 0)] <- 1
   } else {
     time_step <- time_by_list(time_step)
     lag_window <- final_window - 1L
@@ -499,7 +491,7 @@ time_roll_growth_rate <- function(x, window = Inf,
                              align = "right")
     }
     out <- ( (x / x_lagged) ^ (1 / (time_differences)) )
-    out[cpp_which(x == 0 & x_lagged == 0)] <- 1
+    out[which_(x == 0 & x_lagged == 0)] <- 1
   }
   if (!partial){
     elapsed <- time_elapsed(time, time_by = unit_time_by,
@@ -509,7 +501,7 @@ time_roll_growth_rate <- function(x, window = Inf,
     } else {
       is_partial <- cppdoubles::double_lt(abs(elapsed) + 1, time_num)
     }
-    out[cpp_which(is_partial)] <- NA_real_
+    out[which_(is_partial)] <- NA_real_
   }
   out <- glast(out, g = sorted_g2)
   if (!groups_are_sorted){
@@ -537,7 +529,7 @@ time_roll_window_size <- function(time, window = Inf,
   unit_time_by <- add_names(list(1), time_unit)
   g <- GRP2(g, return.groups = FALSE)
   if (!gis_sorted(time, g = g)){
-    stop("time must be sorted and if g is supplied,
+    stop("time variable must be sorted and if g is supplied,
          it must be sorted also by g first")
   }
   if (is.null(g)){
@@ -554,7 +546,7 @@ time_roll_window_size <- function(time, window = Inf,
                      roll_month = roll_month,
                      roll_dst = roll_dst)
   time <- time_cast(time, start)
-  naive_window <- sequence(group_sizes)
+  out <- sequence(group_sizes)
   if (time_num < 0){
     # prepend <- -Inf
     # append <- NULL
@@ -562,7 +554,7 @@ time_roll_window_size <- function(time, window = Inf,
   }
   if (isTRUE(time_num == 0)){
     if (close_left_boundary){
-      out <- frowid(as_DT(list(group_id = group_id(g), time = time)))
+      out <- frowid(new_df(group_id = group_id(g), time = time))
     } else {
       out <- integer(length(time))
     }
@@ -573,14 +565,15 @@ time_roll_window_size <- function(time, window = Inf,
                               gbreaks = g,
                               right = close_left_boundary,
                               codes = TRUE)
-    which_na <- collapse::whichNA(adj_window)
+    which_na <- cheapr::which_na(adj_window)
     adj_window[which_na] <- 0L
-    out <- naive_window - adj_window
+    out <- cheapr::set_subtract(out, adj_window)
   }
   if (time_num < 0){
-    rev_window <- sequence(group_sizes, from = group_sizes, to = min(1L, length(time)), by = -1L)
-    out[which_na] <- -rev_window[which_na]
-    out[-which_na] <- out[-which_na] - 1L
+    rev_window <- -sequence(group_sizes, from = group_sizes, to = min(1L, length(time)), by = -1L)
+    out[which_na] <- rev_window[which_na]
+    which_na <- cheapr::set_change_sign(which_na)
+    out[which_na] <- out[which_na] - 1L
   }
   if (!partial){
     elapsed <- time_elapsed(time, time_by = unit_time_by,
@@ -590,7 +583,7 @@ time_roll_window_size <- function(time, window = Inf,
     } else {
       is_partial <- cppdoubles::double_lt(abs(elapsed) + 1, time_num)
     }
-    out[cpp_which(is_partial)] <- NA_integer_
+    out[which_(is_partial)] <- NA_integer_
   }
   out
 }
@@ -610,7 +603,7 @@ time_roll_window <- function(x, window = Inf, time = seq_along(x),
                                          time_type = time_type,
                                          roll_month = roll_month,
                                          roll_dst = roll_dst)
-  window_widths[cpp_which(is.na(window_widths))] <- 0L
+  window_widths[cheapr::which_na(window_widths)] <- 0L
   out <- roll_chop(x, sizes = window_widths)
   vctrs::new_list_of(out, ptype = x[0L])
 }
@@ -634,14 +627,14 @@ time_roll_apply <- function(x, window = Inf, fun,
                                  time_type = time_type,
                                  roll_month = roll_month,
                                  roll_dst = roll_dst)
-  sizes[cpp_which(is.na(sizes))] <- 0L
+  sizes[cheapr::which_na(sizes)] <- 0L
   x_size <- length(x)
   out <- vector("list", x_size)
   for (i in seq_len(x_size)){
     out[[i]] <- fun(x[seq_len(.subset(sizes, i)) + (i - .subset(sizes, i))])
   }
   if (!partial){
-    which_zero <- collapse::whichv(sizes, 0L)
+    which_zero <- which_val(sizes, 0L)
     if (length(which_zero) > 0L){
       ptype <- out[[1L]][0L]
     }
@@ -658,35 +651,7 @@ time_roll_apply <- function(x, window = Inf, fun,
   if (unlist){
     out <- unlist(out, use.names = FALSE, recursive = FALSE)
   }
-  # out <- glast(out, g = group_id)
   out
-  # time_windows <- time_roll_window(x, window = window,
-  #                                  time = time,
-  #                                  g = g,
-  #                                  partial = partial,
-  #                                  close_left_boundary = close_left_boundary,
-  #                                  time_type = time_type,
-  #                                  roll_month = roll_month,
-  #                                  roll_dst = roll_dst)
-  # out <- lapply(time_windows, fun)
-  # if (!partial){
-  #   window_sizes <- collapse::vlengths(out, use.names = FALSE)
-  #   which_zero <- collapse::whichv(window_sizes, 0L)
-  #   if (length(which_zero) > 0L){
-  #     na_ptype <- out[[1L]][NA_integer_]
-  #   }
-  #   for (i in which_zero){
-  #     out[[i]] <- na_ptype
-  #   }
-  # }
-  # out <- vctrs::list_unchop(out)
-  # if (is.null(g)){
-  #   group_id <- group_id(time)
-  # } else {
-  #   group_id <- group_id(list(group_id(g), time))
-  # }
-  # out <- glast(out, g = group_id)
-  # out
 }
 
 # Rolling join 2nd version (latest working version)
@@ -790,7 +755,7 @@ time_roll_apply <- function(x, window = Inf, fun,
 #     } else {
 #       is_partial <- cppdoubles::double_lt(abs(elapsed) + 1, time_num)
 #     }
-#     out[cpp_which(is_partial)] <- NA_real_
+#     out[which_(is_partial)] <- NA_real_
 #   }
 #   # For duplicate times, we take the last value of each duplicate
 #   out <- glast(out, g = sorted_g2)

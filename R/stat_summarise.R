@@ -14,6 +14,7 @@
 #' If supplied, `q_summarise()` is called and added to the result.
 #' @param na.rm Should `NA` values be removed? Default is `TRUE`.
 #' @param sort Should groups be sorted? Default is `TRUE`.
+#' @param .count_name Name of count column, default is "n".
 #' @param .names An optional glue specification passed to `stringr::glue()`.
 #' If `.names = NULL`, then when there is 1 variable, the function name
 #' is used, i.e `.names = "{.fn}"`, when there are multiple variables and
@@ -26,6 +27,8 @@
 #' a named character vector or numeric vector.
 #' If speed is an expensive resource, it is recommended to use this.
 #' @param as_tbl Should the result be a `tibble`? Default is `FALSE`.
+#' @param inform_stats Should available stat functions be displayed
+#' at the start of each session? Default is `TRUE`.
 #'
 #' @returns
 #' A summary `data.table` containing the summary values for each group.
@@ -72,10 +75,14 @@
 stat_summarise <- function(data, ...,
                            stat = c("n", "nmiss", "ndistinct"),
                            q_probs = NULL,
-                           na.rm = TRUE, sort = TRUE,
+                           na.rm = TRUE, sort = df_group_by_order_default(data),
+                           .count_name = NULL,
                            .names = NULL, .by = NULL, .cols = NULL,
+                           inform_stats = TRUE,
                            as_tbl = FALSE){
-  inform_available_stats()
+  if (inform_stats){
+    inform_available_stats()
+  }
   funs <- .stat_fns
   if (!is.character(stat)){
     stop("stat must be a character vector")
@@ -97,13 +104,13 @@ stat_summarise <- function(data, ...,
   group_vars <- group_info[["dplyr_groups"]]
   dot_vars <- group_info[["extra_groups"]]
   non_group_dot_vars <- setdiff(dot_vars, group_vars)
-  data <- group_info[["data"]]
-  g <- df_to_GRP(data, .cols = group_vars, order = sort)
+  staging <- group_info[["data"]]
+  g <- df_to_GRP(staging, .cols = group_vars, order = sort)
   gstarts <- GRP_starts(g)
   # Distinct groups
   out <- df_row_slice(
     fselect(
-      data, .cols = c(group_vars, non_group_dot_vars)
+      staging, .cols = c(group_vars, non_group_dot_vars)
     ), gstarts
   )
   if (length(group_vars) == 0){
@@ -112,11 +119,15 @@ stat_summarise <- function(data, ...,
   if (df_nrow(out) == 0L && length(group_vars) == 0L){
     out <- df_init(out, 1L)
   }
-  out <- as_DT(out)
+  out <- df_as_dt(out, .copy = FALSE)
   n_nm <- character()
   if ("n" %in% stat){
-    n_nm <- new_n_var_nm(names(out))
-    set_add_cols(out, add_names(list(fn(data, g = g)), n_nm))
+    if (is.null(.count_name)){
+      n_nm <- new_n_var_nm(names(out))
+    } else {
+      n_nm <- .count_name
+    }
+    set_add_cols(out, add_names(list(fn(staging, g = g)), n_nm))
     data.table::setcolorder(out, c(group_vars, n_nm, non_group_dot_vars))
   }
   stat <- setdiff2(stat, "n")
@@ -141,7 +152,7 @@ stat_summarise <- function(data, ...,
     for (s in stat){
       k <- k + 1L
       data.table::set(out, j = var_nms[k],
-                      value = stat_to_collapse_fun(s)(fpluck(data, .col),
+                      value = stat_to_collapse_fun(s)(fpluck(staging, .col),
                                                       g = g,
                                                       na.rm = na.rm,
                                                       use.g.names = FALSE))
@@ -153,7 +164,7 @@ stat_summarise <- function(data, ...,
   out <- fselect(out, .cols = output_nms)
   # Add quantiles if requested
   if (!is.null(q_probs)){
-    q_summary <- q_summarise(data, across(all_of(dot_vars)),
+    q_summary <- q_summarise(staging, across(all_of(dot_vars)),
                              probs = q_probs,
                              pivot = "wide",
                              sort = sort,
@@ -169,7 +180,7 @@ stat_summarise <- function(data, ...,
     }
   }
   if (as_tbl){
-    out <- df_as_tibble(out)
+    out <- df_as_tbl(out)
   }
   out
 }

@@ -164,6 +164,7 @@ roll_growth_rate <- function(x, window = Inf, g = NULL,
                              na.rm = FALSE,
                              log = FALSE,
                              inf_fill = NULL){
+  check_is_num(x)
   check_length(window, 1)
   if (window < 1){
     stop("window must be >= 1")
@@ -174,24 +175,23 @@ roll_growth_rate <- function(x, window = Inf, g = NULL,
   group_order <- sorted_info[["group_order"]]
   is_sorted <- sorted_info[["sorted"]]
   x <- sorted_info[["x"]]
-  lag_window <- lag_sequence(group_sizes, k = window - 1, partial = partial)
-  x_lagged <- roll_lag(x, lag_window)
+  lag_window <- cheapr::lag_sequence(group_sizes, k = window - 1, partial = partial)
   if (na.rm){
-    lag_window <- data.table::frollsum(!is.na(x), n = lag_window,
-                                       adaptive = TRUE,
-                                       algo = "fast",
-                                       align = "right")
-  }
-  if (log){
-    gr <- exp(( log(x) - log(x_lagged) ) / lag_window)
-    gr[cpp_which(lag_window == 0L)] <- 1
+    x_lagged <- cheapr::lag2_(x, lag_window)
+    lag_window <- cpp_roll_count_na(x, window, invert = TRUE, partial = partial) - 1L
+    if (log){
+      gr <- exp(( log(x) - log(x_lagged) ) / lag_window)
+      gr[which_val(lag_window, 0L)] <- 1
+    } else {
+      gr <- ( (x / x_lagged) ^ (1 / lag_window) )
+      gr[which_(x == 0 & x_lagged == 0)] <- 1
+    }
   } else {
-    gr <- ( (x / x_lagged) ^ (1 / lag_window) )
-    gr[cpp_which(x == 0 & x_lagged == 0)] <- 1
+    gr <- cpp_roll_growth_rate(x, lag_window, log)
   }
   if (!is.null(inf_fill)){
     # Any growth change from 0 is replaced with inf_fill
-    gr[cpp_which(is.infinite(gr))] <- inf_fill
+    gr[which_(is.infinite(gr))] <- inf_fill
   }
   if (!fpluck(sorted_info, "sorted")){
     gr <- greorder2(gr, g = sorted_info[["GRP"]])

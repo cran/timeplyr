@@ -8,7 +8,7 @@
 #' @param data A data frame.
 #' @param time Time variable (\bold{data-masking}). \cr
 #' Can be a `Date`, `POSIXt`, `numeric`, `integer`, `yearmon`, or `yearqtr`.
-#' @param time_by_unit Time unit. \cr
+#' @param time_by Time unit. \cr
 #' Must be one of the following:
 #' * string, specifying either the unit or the number and unit, e.g
 #' `time_by = "days"` or `time_by = "2 weeks"`
@@ -27,28 +27,17 @@
 #' @param .add Should the time groups be added to existing groups?
 #' Default is `FALSE`.
 #' @param time_type If "auto", `periods` are used for
-#' the time expansion when days, weeks,
+#' the time aggregation when days, weeks,
 #' months or years are specified, and `durations`
 #' are used otherwise. If `durations`
-#' are used the output is always of class `POSIXt`.
-#' @param time_floor Should the start of each time sequence
-#' be floored to
-#' the nearest unit specified through the `time_by`
-#' argument? This is particularly useful for
-#' starting sequences at the beginning of a week
-#' or month for example.
-#' @param week_start day on which week starts following ISO conventions - 1
-#' means Monday (default), 7 means Sunday.
-#' This is only used when `time_floor = TRUE`.
-#' @param roll_month Control how impossible dates are handled when
-#' month or year arithmetic is involved.
-#' Options are "preday", "boundary", "postday", "full" and "NA".
-#' See `?timechange::time_add` for more details.
-#' @param roll_dst See `?timechange::time_add` for the full list of details.
+#' are used the output is always of class `POSIXct`.
 #' @param .time_by_group Should the time aggregations be built on a
 #' group-by-group basis (the default), or should the time variable be aggregated
 #' using the full data? If done by group, different groups may contain
 #' different time sequences. This only applies when `.add = TRUE`.
+#' @param as_interval Should time variable be a `time_interval`?
+#' Default is `FALSE`. \cr
+#' This can be controlled globally through `options(timeplyr.use_intervals)`.
 #' @param x A `time_tbl_df`.
 #'
 #' @returns
@@ -77,7 +66,7 @@
 #' monthly_flights <- flights %>%
 #'   time_by(time_hour, "month")
 #' weekly_flights <- flights %>%
-#'   time_by(time_hour, "week", time_floor = TRUE)
+#'   time_by(time_hour, "week", from = floor_date(min(time_hour), "week"))
 #'
 #' monthly_flights %>%
 #'   count()
@@ -85,12 +74,11 @@
 #' weekly_flights %>%
 #'   summarise(n = n(), arr_delay = mean(arr_delay, na.rm = TRUE))
 #'
-#' # To aggregate multiple variables, use time_aggregate or time_summarisev
-#'
+#' # To aggregate multiple variables, use time_aggregate
 #'
 #' flights %>%
 #'   select(time_hour) %>%
-#'   mutate(across(everything(), \(x) time_summarisev(x, time_by = dweeks(1)))) %>%
+#'   mutate(across(everything(), \(x) time_aggregate(x, time_by = "weeks"))) %>%
 #'   count(time_hour)
 #' \dontshow{
 #' data.table::setDTthreads(threads = .n_dt_threads)
@@ -98,15 +86,12 @@
 #'}
 #' @rdname time_by
 #' @export
-time_by <- function(data, time, time_by_unit = NULL,
+time_by <- function(data, time, time_by = NULL,
                     from = NULL, to = NULL,
-                    .name = "{.col}",
+                    .name = paste0("time_intv_", time_by_pretty(time_by, "_")),
                     .add = FALSE,
                     time_type = getOption("timeplyr.time_type", "auto"),
-                    time_floor = FALSE,
-                    week_start = getOption("lubridate.week.start", 1),
-                    roll_month = getOption("timeplyr.roll_month", "preday"),
-                    roll_dst = getOption("timeplyr.roll_dst", "boundary"),
+                    as_interval = getOption("timeplyr.use_intervals", FALSE),
                     .time_by_group = TRUE){
   check_is_df(data)
   data_nms <- names(data)
@@ -127,12 +112,12 @@ time_by <- function(data, time, time_by_unit = NULL,
   col_seq <- seq_along(names(time_data))
   from_data <- from_info[["data"]]
   to_data <- to_info[["data"]]
-  from_data <- fselect(from_data, .cols = cpp_which(names(from_data) %in% names(time_data), invert = TRUE))
-  to_data <- fselect(to_data, .cols = cpp_which(names(to_data) %in% names(time_data), invert = TRUE))
-  out <- vctrs::vec_cbind(time_data, from_data, to_data)
+  from_data <- fselect(from_data, .cols = which_(names(from_data) %in% names(time_data), invert = TRUE))
+  to_data <- fselect(to_data, .cols = which_(names(to_data) %in% names(time_data), invert = TRUE))
+  out <- df_cbind(time_data, from_data, to_data)
   if (length(time_var) > 0L){
     check_is_time_or_num(out[[time_var]])
-    time_by <- time_by_get(out[[time_var]], time_by = time_by_unit,
+    time_by <- time_by_get(out[[time_var]], time_by = time_by,
                            quiet = TRUE)
     if (time_by_length(time_by) > 1){
       stop("Please supply only one numeric value in time_by")
@@ -150,34 +135,37 @@ time_by <- function(data, time, time_by_unit = NULL,
                                 from = from_var, to = to_var,
                                 .by = all_of(time_span_groups))
     # Aggregate time data
-    time_agg <- time_aggregate_left(out[[time_var]],
+    time_agg <- time_aggregate(out[[time_var]],
                                     time_by = time_by,
-                                    start = fpluck(from_to_list, 1L),
-                                    end = fpluck(from_to_list, 2L),
-                                    g = time_span_GRP,
+                                    from = fpluck(from_to_list, 1L),
+                                    to = fpluck(from_to_list, 2L),
                                     time_type = time_type,
-                                    roll_month = roll_month,
-                                    roll_dst = roll_dst,
-                                    time_floor = time_floor,
-                                    week_start = week_start,
-                                    as_int = TRUE)
-    time_span_start <- collapse::fmin(time_agg, g = time_span_GRP,
+                                    as_interval = as_interval)
+    if (as_interval){
+      time_start <- interval_start(time_agg)
+    } else {
+      time_start <- time_agg
+    }
+    time_span_start <- collapse::fmin(time_start,
+                                      g = time_span_GRP,
                                       use.g.names = FALSE)
-    time_span_end <- collapse::fmax(time_int_end(time_agg), g = time_span_GRP,
+    time_span_end <- collapse::fmax(out[[time_var]], g = time_span_GRP,
                                     use.g.names = FALSE)
-    time_agg <- time_int_rm_attrs(time_agg)
+    # time_span_end <- collapse::fmax(time_int_end(time_agg), g = time_span_GRP,
+    #                                 use.g.names = FALSE)
+    # time_agg <- time_int_rm_attrs(time_agg)
     time_var <- across_col_names(time_var, .fns = "", .names = .name)
     out <- df_add_cols(out, add_names(list(time_agg), time_var))
     time_span <- GRP_group_data(time_span_GRP)
-    if (df_nrow(time_span) == 0L){
+    if (df_nrow(time_span) == 0L && df_nrow(data) > 0L){
       time_span <- df_init(time_span, 1L)
     }
     time_span$start <- time_span_start
     time_span$end <- time_span_end
-    num_gaps <- time_num_gaps(out[[time_var]],
+    num_gaps <- time_num_gaps(time_start,
                               time_by = time_by,
                               time_type = time_type,
-                              g = g, use.g.names = FALSE,
+                              g = time_span_GRP, use.g.names = FALSE,
                               check_time_regular = FALSE)
     time_span[["num_gaps"]] <- num_gaps
   }
@@ -229,6 +217,7 @@ time_by_units <- function(x){
 time_by_units.time_tbl_df <- function(x){
   attr(x, "time_by")
 }
+#' @exportS3Method pillar::tbl_sum
 tbl_sum.time_tbl_df <- function(x, ...){
   n_groups <- df_nrow(group_data(x))
   group_vars <- group_vars(x)

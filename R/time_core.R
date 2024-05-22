@@ -6,7 +6,8 @@
 #' datetime vectors.
 #'
 #' @param x Time variable. \cr
-#' Can be a `Date`, `POSIXt`, `numeric`, `integer`, `yearmon`, or `yearqtr`.
+#' Can be a `Date`, `POSIXt`, `numeric`, `integer`, `yearmon`, `yearqtr`,
+#' `year_month` or `year_quarter`.
 #' @param time_by Time unit. \cr
 #' Must be one of the following:
 #' * string, specifying either the unit or the number and unit, e.g
@@ -22,10 +23,6 @@
 #' @param unique Should the result be unique or match the length of the vector?
 #' Default is `TRUE`.
 #' @param sort Should the output be sorted? Default is `TRUE`.
-#' @param include_interval Logical. If `TRUE` then the result is a `tibble`
-#' with a column "interval" of the form `time_min <= x < time_max`
-#' showing the time interval in which the aggregated time points belong to.
-#' The rightmost interval will always be closed.
 #' @param time_type If "auto", `periods` are used for
 #' the time expansion when days, weeks, months or years are specified,
 #' and `durations` are used otherwise.
@@ -48,6 +45,9 @@
 #' This can for example be a vector or data frame.
 #' @param use.g.names Should the result include group names?
 #' Default is `TRUE`.
+#' @param as_interval Should result be a `time_interval`?
+#' Default is `FALSE`. \cr
+#' This can be controlled globally through `options(timeplyr.use_intervals)`.
 #'
 #' @returns
 #' Vectors (typically the same class as `x`) of varying lengths depending
@@ -74,7 +74,7 @@
 #' time_span_size(x) - length(unique(x))
 #'
 #' # Time sequence that spans the data
-#' time_span(x) # Automatically detects hour granularity
+#' length(time_span(x)) # Automatically detects hour granularity
 #' time_span(x, time_by = "month")
 #' time_span(x, time_by = list("quarters" = 1),
 #'              to = today(),
@@ -89,9 +89,9 @@
 #' time_summarisev(y, time_by = "quarter")
 #' time_summarisev(y, time_by = "quarter", unique = TRUE)
 #' flights %>%
-#'   fcount(quarter_start = time_summarisev(time_hour, "quarter"))
+#'   fcount(quarter = time_summarisev(time_hour, "quarter"))
 #' # Alternatively
-#' time_countv(x, time_by = "quarter")
+#' time_countv(flights$time_hour, time_by = "quarter")
 #' # If you want the above as an atomic vector just use tibble::deframe
 #' \dontshow{
 #' data.table::setDTthreads(threads = .n_dt_threads)
@@ -129,9 +129,6 @@ time_expandv <- function(x, time_by = NULL, from = NULL, to = NULL,
     from <- time_floor2(from, time_by, week_start = week_start)
   }
   seq_sizes <- time_seq_sizes(from, to, time_by, time_type = time_type)
-  # if (collapse::allNA(seq_sizes)){
-  #   return(rep_len(na_init(x), length(from)))
-  # }
   out <- time_seq_v2(seq_sizes,
                      from = from,
                      time_by = time_by,
@@ -168,8 +165,7 @@ time_completev <- function(x, time_by = NULL, from = NULL, to = NULL,
                             roll_month = roll_month,
                             roll_dst = roll_dst)
   out <- time_cast(x, time_full)
-  # out <- c(x, time_full[cpp_which(time_full %in% x, invert = TRUE)])
-  gaps <- time_full[collapse::whichNA(collapse::fmatch(time_full, out, overid = 2L))]
+  gaps <- cheapr::setdiff_(time_full, out)
   if (length(gaps) > 0){
     out <- c(out, gaps)
   }
@@ -187,7 +183,7 @@ time_summarisev <- function(x, time_by = NULL, from = NULL, to = NULL,
                             week_start = getOption("lubridate.week.start", 1),
                             roll_month = getOption("timeplyr.roll_month", "preday"),
                             roll_dst = getOption("timeplyr.roll_dst", "boundary"),
-                            include_interval = FALSE){
+                            as_interval = getOption("timeplyr.use_intervals", FALSE)){
   check_is_time_or_num(x)
   check_length_lte(from, 1)
   check_length_lte(to, 1)
@@ -203,6 +199,7 @@ time_summarisev <- function(x, time_by = NULL, from = NULL, to = NULL,
   if (isTRUE(from > to)){
     stop("from must be <= to")
   }
+  time_by <- time_by_get(x, time_by = time_by)
   # Time sequence
   time_breaks <- time_expandv(x, time_by = time_by,
                               from = from, to = to,
@@ -213,34 +210,18 @@ time_summarisev <- function(x, time_by = NULL, from = NULL, to = NULL,
                               roll_dst = roll_dst)
   x <- time_cast(x, time_breaks)
   to <- time_cast(to, x)
-  # Cut time
-  time_bins <- c(unclass(time_breaks), unclass(to))
-  if (include_interval){
-    time_break_ind <- cut_time(x, breaks = time_bins, codes = TRUE)
-    # Time breaks subset on cut indices
-    out <- time_breaks[time_break_ind]
-    time_int <- tseq_interval(x = to, time_breaks)
-    time_int <- time_int[time_break_ind]
-    out <- new_tbl(x = out, interval = time_int)
-    # Unique and sorting
-    if (unique){
-      out <- fdistinct(out, .cols = "x", .keep_all = TRUE, sort = sort)
-    }
-    if (sort && !unique){
-      out <- farrange(out, .cols = "x")
-    }
-    if (!is_interval(time_int)){
-      attr(out[["interval"]], "start") <- out[["x"]]
-    }
-  } else {
-    out <- cut_time(x, breaks = time_bins, codes = FALSE)
-    if (unique){
-      out <- collapse::funique(out, sort = sort)
-    } else {
-      if (sort){
-        out <- radix_sort(out)
-      }
-    }
+  out <- cut_time(x, breaks = c(unclass(time_breaks), unclass(to)), codes = FALSE)
+  if (unique){
+    out <- collapse::funique(out, sort = sort)
+  }
+  if (sort && !unique){
+    out <- sort(out)
+  }
+  if (as_interval){
+    out <- time_by_interval(out, time_by = time_by,
+                            time_type = time_type,
+                            roll_month = roll_month,
+                            roll_dst = roll_dst)
   }
   out
 }
@@ -250,11 +231,11 @@ time_countv <- function(x, time_by = NULL, from = NULL, to = NULL,
                         sort = TRUE, unique = TRUE,
                         complete = FALSE,
                         time_type = getOption("timeplyr.time_type", "auto"),
-                        include_interval = FALSE,
                         time_floor = FALSE,
                         week_start = getOption("lubridate.week.start", 1),
                         roll_month = getOption("timeplyr.roll_month", "preday"),
-                        roll_dst = getOption("timeplyr.roll_dst", "boundary")){
+                        roll_dst = getOption("timeplyr.roll_dst", "boundary"),
+                        as_interval = getOption("timeplyr.use_intervals", FALSE)){
   check_is_time_or_num(x)
   time_by <- time_by_get(x, time_by = time_by)
   if (is.null(from)){
@@ -278,50 +259,29 @@ time_countv <- function(x, time_by = NULL, from = NULL, to = NULL,
   to <- time_cast(to, x)
   out_len <- length(x)
   # Aggregate time/cut time
-  time_break_ind <- cut_time(x, breaks = c(time_breaks, to), codes = TRUE)
-  # Time breaks subset on cut indices
-  x <- time_breaks[time_break_ind]
+  x <- cut_time(x, breaks = c(unclass(time_breaks), unclass(to)), codes = FALSE)
   # Counts
   out <- group_sizes(x, expand = TRUE)
   # (Optionally) complete time data
   if (complete){
-    time_missed <- time_breaks[collapse::whichNA(collapse::fmatch(time_breaks, x, overid = 2L))]
+    time_missed <- cheapr::setdiff_(time_breaks, x)
     if (length(time_missed) > 0L){
       x <- c(x, time_missed) # Complete time sequence
     }
     out <- c(out, integer(length(time_missed)))
   }
-  if (include_interval){
-    time_seq_int <- tseq_interval(x = to, time_breaks)
-    time_int <- time_seq_int[time_break_ind]
-    if (complete && length(time_missed) > 0L){
-      time_int <- c(time_int, time_seq_int[cpp_which(attr(time_seq_int, "start") %in%
-                                                       time_cast(time_missed, attr(time_seq_int, "start")))])
-    }
-    out <- new_tbl(x = x, interval = time_int, n = out)
-    if (unique){
-      out <- fdistinct(out, .cols = "x", .keep_all = TRUE, sort = sort)
-    }
-    if (sort && !unique){
-      out <- farrange(out, .cols = "x")
-    }
-    if (!is_interval(out[["interval"]])){
-      attr(out[["interval"]], "start") <- out[["x"]]
-    }
-  } else {
-    if (unique || sort){
-      dt <- new_dt(x = x, n = out, .copy = TRUE)
-      if (unique){
-        dt <- collapse::funique(dt, cols = "x", sort = FALSE)
-      }
-      if (sort){
-        setorderv2(dt, cols = "x")
-      }
-      out <- df_as_tibble(dt)
-    }
+  out <- new_tbl(x = x, n = out)
+  if (unique){
+    out <- fdistinct(out, .cols = "x", sort = sort, .keep_all = TRUE)
   }
-  if (!is_df(out)){
-    out <- new_tbl(x = x, n = out)
+  if (sort && !unique){
+    out <- farrange(out, .cols = "x")
+  }
+  if (as_interval){
+    out[["x"]] <- time_by_interval(out[["x"]], time_by = time_by,
+                                   time_type = time_type,
+                                   roll_month = roll_month,
+                                   roll_dst = roll_dst)
   }
   out
 }
@@ -363,5 +323,34 @@ time_span_size <- function(x, time_by = NULL, from = NULL, to = NULL,
       names(out) <- group_names
     }
   }
+  out
+}
+time_by_interval <- function(x, time_by = NULL,
+                             # bound_range = FALSE,
+                             time_type = getOption("timeplyr.time_type", "auto"),
+                             roll_month = getOption("timeplyr.roll_month", "preday"),
+                             roll_dst = getOption("timeplyr.roll_dst", "boundary")){
+  time_by <- time_by_get(x, time_by = time_by)
+  check_time_by_length_is_one(time_by)
+  direction <- time_by_sign(time_by)
+  if (isTRUE(direction < 0)){
+    stop("Right-closed and left-open intervals are currently unsupported")
+  }
+  end <- time_add2(x, time_by,
+                   time_type = time_type,
+                   roll_month = roll_month,
+                   roll_dst = roll_dst)
+  start <- time_cast(x, end)
+  out <- time_interval(start, end)
+  # if (bound_range){
+  #   right_bound <- time_cast(collapse::fmax(x, na.rm = TRUE), end)
+  #   which_closed <- which_(cppdoubles::double_gt(unclass(end), unclass(right_bound)))
+  #   # end[which_closed] <- right_bound
+  #   out[which_closed] <- time_interval(start[which_closed],
+  #                                      time_add2(right_bound,
+  #                                                time_by = time_by,
+  #                                                roll_month = roll_month,
+  #                                                roll_dst = roll_dst))
+  # }
   out
 }

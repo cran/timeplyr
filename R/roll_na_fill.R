@@ -45,7 +45,7 @@
 #'
 #' dt <- data.table(x, groups)
 #'
-#' roll_na_fill(x, groups)
+#' filled <- roll_na_fill(x, groups)
 #' \donttest{
 #' library(zoo)
 #'
@@ -84,19 +84,12 @@
 #' @export
 roll_na_fill <- function(x, g = NULL, fill_limit = Inf){
   check_length(fill_limit, 1)
-  if (num_na(x) %in% c(0L, length(x))){
+  if (cheapr::num_na(x, recursive = TRUE) %in% c(0L, cheapr::unlisted_length(x))){
     return(x)
   }
-  o <- radixorderv2(g, starts = FALSE, sort = FALSE, group.sizes = TRUE)
-  if (is_GRP(g)){
-    sizes <- GRP_group_sizes(g)
-    # Accounting for factors
-    if (collapse::anyv(sizes, 0L)){
-      sizes <- sizes[cpp_which(sizes > 0L)]
-    }
-  } else {
-    sizes <- attr(o, "group.sizes")
-  }
+  order_and_counts <- group_order_and_counts(g)
+  o <- order_and_counts[[1L]]
+  sizes <- order_and_counts[[2L]]
   if (is.null(o)){
     out <- .roll_na_fill(x, fill_limit = fill_limit)
   } else {

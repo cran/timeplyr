@@ -46,8 +46,7 @@
 #' Default is `0`.
 #' @param .add 	Should episodic variables be added to the data? \cr
 #' If `FALSE` (the default), then only the relevant variables are returned. \cr
-#' If `TRUE`, the episodic variables are added to the original data using
-#' `dplyr::bind_cols()`. \cr
+#' If `TRUE`, the episodic variables are added to the original data.
 #' In both cases, the order of the data is unchanged.
 #' @param event (\bold{Optional}) List that encodes which rows are events,
 #' and which aren't.
@@ -80,8 +79,12 @@
 #' It is assumed that after a pre-determined amount of time, a positive result
 #' represents a new episode of infection.
 #'
-#' To perform simple time-since-event analysis, set `window` to `1`, which is
-#' the default.
+#' To perform simple time-since-event analysis, which means one
+#' is not interested in episodes, simply use `time_elapsed()` instead.
+#'
+#' To find implicit missing gaps in time, set `window` to `1` and
+#' `switch_on_boundary` to `FALSE`. Any event classified as an
+#' episode in this scenario is an event following a gap in time.
 #'
 #' The data are always sorted before calculation and then
 #' sorted back to the input order.
@@ -128,6 +131,24 @@
 #'   mutate(date = as_date(time_hour)) %>%
 #'   group_by(origin, dest) %>%
 #'   time_episodes(date, time_by = "week", window = 1)
+#'
+#' # The pooled average time between flights of a specific origin and destination
+#' # is ~ 5.2 hours
+#' # This average is a weighted average of average time between events
+#' # Weighted by the frequency of origin-destination groups (pairs)
+#'
+#' # It can be calculated like so:
+#' # flights %>%
+#' #   arrange(origin, dest, time_hour) %>%
+#' #   group_by(origin, dest) %>%
+#' #   mutate(time_diff = time_diff(lag(time_hour), time_hour, "hours")) %>%
+#' #   summarise(n = n(),
+#' #             mean = mean(time_diff, na.rm = TRUE)) %>%
+#' #   ungroup() %>%
+#' #   summarise(pooled_mean = weighted.mean(mean, n, na.rm = TRUE))
+#'
+#' events
+#'
 #' episodes <- events %>%
 #'   filter(ep_id_new > 1)
 #' nrow(fdistinct(episodes, origin, dest)) # 55 origin-destinations
@@ -136,7 +157,9 @@
 #' # dry-periods
 #' episodes %>%
 #'   ungroup() %>%
-#'   time_count(time = ep_start, time_by = "week", time_floor = TRUE) %>%
+#'   time_by(ep_start, time_by = "week",
+#'           .name = "ep_start") %>%
+#'   count() %>%
 #'   ggplot(aes(x = ep_start, y = n)) +
 #'   geom_bar(stat = "identity")
 #' \dontshow{
@@ -156,12 +179,14 @@ time_episodes <- function(data, time, time_by = NULL,
   rlang::check_required(time)
   N <- df_nrow(data)
   check_length(window, 1)
+  check_is_num(window)
   if (window < 0){
     stop("window must be strictly greater or equal to 0")
   }
   start_nms <- names(data)
   time_quo <- enquo(time)
-  group_vars <- get_groups(data, .by = {{ .by }})
+  data <- fgroup_by(data, .by = {{ .by }}, order = TRUE, .add = TRUE)
+  group_vars <- get_groups(data)
   time_col <- tidy_select_names(data, !!time_quo)
   out <- data
   # Data names after data-masking
@@ -187,7 +212,8 @@ time_episodes <- function(data, time, time_by = NULL,
                             event[[1L]],
                           1L, 0L)
     ), event_id_nm))
-    if (num_na(fpluck(out, event_col)) != num_na(fpluck(out, time_col))){
+    # if (count_val(cheapr::row_na_counts(fselect(out, .cols = c(time_col, event_col))), 1) > 0){
+    if (na_count(fpluck(out, event_col)) != na_count(fpluck(out, time_col))){
       warning(paste0("There is a mismatch of NAs between ",
                      time_col, " and ",
                      event_col, ", please check."))
@@ -196,7 +222,7 @@ time_episodes <- function(data, time, time_by = NULL,
   out <- fselect(out, .cols = c(group_vars, time_col,
                                  event_col, event_id_nm))
   # Make a copy
-  out <- data.table::copy(collapse::qDT(out))
+  out <- df_as_dt(out)
   if (length(time_col) == 0){
     stop("Please supply date or datetime for episode calculation")
   }
@@ -205,19 +231,19 @@ time_episodes <- function(data, time, time_by = NULL,
   grp_nm <- new_var_nm(data_nms, ".group")
   set_add_cols(out, add_names(
     list(
-      group_id(data, .by = {{ .by }},
-               as_qg = TRUE, order = TRUE)
+      group_id(data, as_qg = TRUE, order = TRUE)
     ), grp_nm
   ))
   n_groups <- attr(out[[grp_nm]], "N.groups")
   group_sizes <- attr(out[[grp_nm]], "group.sizes")
 
   # Remove qG class
-  set_add_cols(out, add_names(
-    list(
-      unclass(out[[grp_nm]])
-    ), grp_nm
-  ))
+  strip_attrs(out[[grp_nm]], set = TRUE)
+  # set_add_cols(out, add_names(
+  #   list(
+  #     unclass(out[[grp_nm]])
+  #   ), grp_nm
+  # ))
   # Group by group vars + time
   grp_nm2 <- new_var_nm(out, ".group")
   set_add_cols(out, add_names(list(
@@ -241,7 +267,7 @@ time_episodes <- function(data, time, time_by = NULL,
   # Convert non-event dates to NA
   # So that they can be skipped/ignored
   if (length(event_col) > 0){
-    which_non_event <- cpp_which(out[[event_id_nm]] == 0L)
+    which_non_event <- which_val(out[[event_id_nm]], 0L)
     event_dates <- out[[time_col]][which_non_event] # Save to re-add later
     data.table::set(out,
                     i = which_non_event,
@@ -276,15 +302,105 @@ time_episodes <- function(data, time, time_by = NULL,
   set_rm_cols(out, row_id_nm)
   if (.add){
     # Simply bind the cols together
-    vctrs::vec_cbind(data, fselect(out, .cols = new_cols))
+    out <- df_cbind(data, fselect(out, .cols = new_cols))
   } else {
     # Only keep the key variables
     out_nms <- c(group_vars, time_col, event_col, new_cols)
     # Set the column order
     out <- fselect(out, .cols = out_nms)
-    df_reconstruct(out, data)
   }
+  out <- df_reconstruct(out, data)
+  threshold <- time_by
+  threshold[[1L]] <- time_by_num(time_by) * window
+  out <- structure(out, time = time_col, time_by = time_by, threshold = threshold)
+  class(out) <- c("episodes_tbl_df", class(out))
+  out
 }
+#' @exportS3Method pillar::tbl_sum
+tbl_sum.episodes_tbl_df <- function(x, ...){
+  # TO-DO: Add avg events per episode
+  groups_header <- character()
+  episodes_header <- character()
+  elapsed_header <- character()
+  threshold_header <- character()
+  # Groups
+  group_vars <- group_vars(x)
+  GRPS <- df_to_GRP(x, return.groups = FALSE)
+  if (length(group_vars) > 0){
+    groups <- group_data(x)
+    groups_header <- c("Groups" =
+                         paste0(paste(group_vars, collapse = ", "),
+                                " [",
+                                prettyNum(df_nrow(groups), big.mark = ","),
+                                "]"))
+  }
+  # Episodes
+  if ("ep_id_new" %in% names(x)){
+    # max_episodes <- collapse::fmax(x[["ep_id_new"]], g = GRPS,
+    #                                use.g.names = FALSE, na.rm = TRUE)
+    n_episodes <- collapse::fsum(x[["ep_id_new"]] > 0L, g = GRPS,
+                                   use.g.names = FALSE, na.rm = TRUE)
+    median_episodes <- collapse::fmedian(n_episodes)
+    total_episodes <- sum(n_episodes)
+    mean_episodes <- total_episodes / length(n_episodes)
+    episodes_header <- c(
+      "Episodes" = paste0(
+        "N: ",
+        prettyNum(total_episodes, big.mark = ","),
+        ", ",
+        "Median: ",
+        prettyNum(round(median_episodes), big.mark = ","),
+        ", ",
+        "Mean: ",
+        prettyNum(round(mean_episodes, 2), big.mark = ","),
+        " ",
+        inline_hist(n_episodes, n_bins = 7)
+      )
+    )
+  }
+  if ("t_elapsed" %in% names(x) && "ep_id_new" %in% names(x)){
+    counts <- fn(x[["ep_id_new"]], g = GRPS, use.g.names = FALSE)
+    ## Elapsed time between events (weighted by group counts)
+    which_index <- which_val(x[["ep_id_new"]], 1L)
+    elapsed <- x[["t_elapsed"]]
+    elapsed[which_index] <- NA
+    mean_elapsed <- collapse::fmean(elapsed, g = GRPS,
+                                    use.g.names = FALSE, na.rm = TRUE)
+    pooled_elapsed <- arithmetic_mean(mean_elapsed, weights = counts)
+    if (length(pooled_elapsed) == 0){
+      pooled_string <- "NaN"
+      } else {
+        pretty_mean <- add_names(
+          list(
+            pooled_elapsed * time_by_num(attr(x, "time_by"))
+          ), time_by_unit(attr(x, "time_by"))
+        )
+        if (is.null(names(pretty_mean))){
+          pooled_string <- "NA"
+        } else {
+          pooled_string <- time_by_pretty(pretty_mean)
+        }
+      }
+    elapsed_header <- c(
+      "Time b/w events" = paste0(
+        "Pooled mean: ",
+        pooled_string
+      )
+    )
+  }
+  if (!is.null(attr(x, "threshold"))){
+    threshold_header <- c("Threshold" = time_by_pretty(attr(x, "threshold")))
+  }
+  num_row <- prettyNum(df_nrow(x), big.mark = ",")
+  num_col <- prettyNum(df_ncol(x), big.mark = ",")
+  tbl_header <- c("A tibble" = paste0(num_row, " x ", num_col))
+  c(tbl_header,
+    groups_header,
+    episodes_header,
+    elapsed_header,
+    threshold_header)
+}
+
 # Internal helper to calculate time episodes
 # Data must be sorted by groups + time
 set_calc_episodes <- function(data,
@@ -332,7 +448,7 @@ set_calc_episodes <- function(data,
                   j = "ep_id_new",
                   value = fpluck(data, "ep_id")[g3_starts])
   data.table::set(data,
-                  i = cpp_which(is.na(fpluck(data, "ep_id"))),
+                  i = cheapr::which_na(fpluck(data, "ep_id")),
                   j = "ep_id_new",
                   value = NA_integer_)
   # Add episode start dates

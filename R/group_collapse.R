@@ -37,7 +37,7 @@
 #' @param loc Should group locations be added? Default is `TRUE`.
 #' @param start Should group start locations be added? Default is `TRUE`.
 #' @param end Should group end locations be added? Default is `TRUE`.
-#' @param drop Should unused factor levels be dropped? Default is `TRUE`.
+#' @param .drop Should unused factor levels be dropped? Default is `TRUE`.
 #'
 #' @returns
 #' A `tibble` of unique groups and an integer ID uniquely identifying each group.
@@ -74,7 +74,7 @@ group_collapse <- function(data, ..., order = TRUE, sort = FALSE,
                            size = TRUE, loc = TRUE,
                            # loc_order = TRUE,
                            start = TRUE, end = TRUE,
-                           drop = TRUE){
+                           .drop = df_group_by_drop_default(data)){
   UseMethod("group_collapse")
 }
 #' @export
@@ -84,7 +84,7 @@ group_collapse.default <- function(data, ..., order = TRUE, sort = FALSE,
                                    size = TRUE, loc = TRUE,
                                    # loc_order = TRUE,
                                    start = TRUE, end = TRUE,
-                                   drop = TRUE){
+                                   .drop = df_group_by_drop_default(data)){
   g <- GRP2(safe_ungroup(data),
             sort = order,
             decreasing = !ascending,
@@ -93,35 +93,37 @@ group_collapse.default <- function(data, ..., order = TRUE, sort = FALSE,
             return.order = order || loc,
             method = "auto",
             call = FALSE,
-            drop = drop)
-  out <- collapse::qDT(as.list(GRP_groups(g)))
+            .drop = .drop)
+  # starts <- GRP_starts(g)
+  # out <- cheapr::sset(data, starts)
+  # if (!is.list(data)){
+  #   out <- new_df(x = out)
+  # } else {
+  #   out <- list_as_df(as.list(out))
+  # }
+  out <- list_as_df(as.list(GRP_groups(g)))
   if (id){
-    set_add_cols(out, list(.group = df_seq_along(out)))
+    out[[".group"]] <- df_seq_along(out)
+    # set_add_cols(out, list(.group = df_seq_along(out)))
   }
-  include_loc <- loc ||
-    (start && is.null(g[["group.starts"]])) ||
-    end
+  include_loc <- loc || end
   if (include_loc){
     GRP_loc <- GRP_loc(g)
-    set_add_cols(out, list(.loc = structure(GRP_loc,
-                                            ptype = integer(),
-                                            class = c("vctrs_list_of",
-                                                      "vctrs_vctr",
-                                                      "list"))))
+    out[[".loc"]] <- vctrs_new_list_of(GRP_loc, integer())
   } else {
     GRP_loc <- NULL
   }
   if (start){
-    set_add_cols(out, list(.start = GRP_starts(g, loc = GRP_loc)))
+    out[[".start"]] <- GRP_starts(g)
   }
   if (end){
-    set_add_cols(out, list(.end = GRP_ends(g, loc = GRP_loc)))
+    out[[".end"]] <- GRP_ends(g, loc = GRP_loc)
   }
   if (!loc && include_loc){
-    set_rm_cols(out, ".loc")
+    out[[".loc"]] <- NULL
   }
   if (size){
-    set_add_cols(out, list(.size = GRP_group_sizes(g)))
+    out[[".size"]] <- GRP_group_sizes(g)
   }
   if (!sort && order){
     unsorted_i <- collapse::funique(GRP_group_id(g), sort = FALSE)
@@ -129,62 +131,52 @@ group_collapse.default <- function(data, ..., order = TRUE, sort = FALSE,
   }
   # Method for when not dropping unused factor levels
   # At the moment a bit convoluted
-  if (!drop){
+  if (!.drop){
     group_names <- names(out)[!names(out) %in%
                                 c(".group", ".loc", ".start", ".end", ".size")]
     group_out <- fselect(out, .cols = group_names)
     is_factor <- vapply(group_out, is.factor, FALSE, USE.NAMES = FALSE)
+    non_factors <- fselect(group_out, .cols = cheapr::which_(is_factor, invert = TRUE))
     if (any(is_factor)){
-      # If we have a mix of factors and non factors
-      # Then we do not proceed
-      if (sum(is_factor) < length(is_factor)){
-        rlang::abort(c("There are a mix of factor and non-factor variables",
-                       "and there is currently no method for dealing with this.",
-                       "Please use dplyr::group_by for this behaviour."))
-      }
-      group_out <- fselect(group_out, .cols = which(is_factor))
+      factors <- fselect(group_out, .cols = which_(is_factor))
       group_data_size <- prod(
-        vapply(group_out, collapse::fnlevels, 0L)
+        vapply(factors, collapse::fnlevels, 0L)
       )
-      num_missing_categories <- group_data_size - n_unique(
-        fselect(group_out, .cols = names(group_out))
-      )
+      num_missing_categories <- group_data_size - n_unique(factors)
       if (num_missing_categories > 0){
-        # The below cross joins all factor categories
-        # Removes existing category combinations
-        missed_categories <- vctrs::vec_set_difference(
-          list_to_tibble(
-            crossed_join(
-              lapply(group_out,
-                     function(x) collapse::qF(levels(x), sort = FALSE)),
-              as_dt = FALSE, unique = FALSE
+        # crossed_join(c(lapply(non_factors, collapse::funique),
+        #                lapply(factors, levels_factor)))
+        full <- list_as_df(
+          add_names(
+            CJ2(
+              lapply(factors, cheapr::levels_factor)
             )
-          ),
-          df_as_tibble(group_out)
+            , names(factors)
+          )
         )
+        missed <- collapse_join(
+          full, group_out, how = "anti", on = names(full)
+        )
+        for (non_factor in names(group_out)[which_(is_factor, invert = TRUE)]){
+          missed[[non_factor]] <- na_init(group_out[[non_factor]])
+        }
         if (id){
-          missed_categories[[".group"]] <- NA_integer_
+          missed[[".group"]] <- NA_integer_
         }
         # Bind the combinations that don't exist
         if (loc){
-          missed_categories[[".loc"]] <- structure(
-            list(integer()),
-            ptype = integer(),
-            class = c("vctrs_list_of",
-                      "vctrs_vctr",
-                      "list")
-          )
+          missed[[".loc"]] <- vctrs_new_list_of(list(integer()), integer())
         }
         if (start){
-          missed_categories[[".start"]] <- 0L
+          missed[[".start"]] <- 0L
         }
         if (end){
-          missed_categories[[".end"]] <- 0L
+          missed[[".end"]] <- 0L
         }
         if (size){
-          missed_categories[[".size"]] <- 0L
+          missed[[".size"]] <- 0L
         }
-        out <- vctrs::vec_rbind(out, missed_categories)
+        out <- collapse::rowbind(out, missed, return = "data.frame")
         if (id){
           out[[".group"]] <- group_id(out, .cols = group_names,
                                       order = order)
@@ -199,7 +191,7 @@ group_collapse.default <- function(data, ..., order = TRUE, sort = FALSE,
       }
     }
   }
-  df_as_tibble(out)
+  df_as_tbl(out)
 }
 #' @export
 group_collapse.factor <- function(data, ..., order = TRUE, sort = FALSE,
@@ -208,7 +200,7 @@ group_collapse.factor <- function(data, ..., order = TRUE, sort = FALSE,
                                    size = TRUE, loc = TRUE,
                                    # loc_order = TRUE,
                                    start = TRUE, end = TRUE,
-                                   drop = TRUE){
+                                   .drop = df_group_by_drop_default(data)){
   # Doing this because collapse::GRP(x) coerces x
   # into character if it is a factor
   # whereas no coercion happens with collapse::GRP(data.frame(x))
@@ -221,7 +213,7 @@ group_collapse.factor <- function(data, ..., order = TRUE, sort = FALSE,
                  loc = loc,
                  start = start,
                  end = end,
-                 drop = drop)
+                 .drop = .drop)
 }
 #' @export
 group_collapse.data.frame <- function(data, ..., order = TRUE, sort = FALSE,
@@ -231,7 +223,7 @@ group_collapse.data.frame <- function(data, ..., order = TRUE, sort = FALSE,
                                       size = TRUE, loc = TRUE,
                                       # loc_order = TRUE,
                                       start = TRUE, end = TRUE,
-                                      drop = TRUE){
+                                      .drop = df_group_by_drop_default(data)){
   N <- df_nrow(data)
   group_info <- tidy_group_info(data, ..., .by = {{ .by }},
                                 .cols = .cols,
@@ -245,7 +237,7 @@ group_collapse.data.frame <- function(data, ..., order = TRUE, sort = FALSE,
     rowids <- list(rowids)[ss]
     out <- new_tbl(".group" = integer(ss) + 1L)
     if (loc){
-      out[[".loc"]] <- vctrs::new_list_of(rowids, ptype = integer(0))
+      out[[".loc"]] <- vctrs_new_list_of(rowids, integer())
     }
     # if (loc_order){
     #   out[[".order"]] <- vctrs::as_list_of(rowids, .ptype = integer(0))
@@ -270,7 +262,7 @@ group_collapse.data.frame <- function(data, ..., order = TRUE, sort = FALSE,
                                   ascending = ascending,
                                   # loc_order = loc_order,
                                   start = start, end = end,
-                                  drop = drop)
+                                  .drop = .drop)
   }
   out
 }
@@ -282,7 +274,7 @@ group_collapse.grouped_df <- function(data, ..., order = TRUE, sort = FALSE,
                                       size = TRUE, loc = TRUE,
                                       # loc_order = TRUE,
                                       start = TRUE, end = TRUE,
-                                      drop = dplyr::group_by_drop_default(data)){
+                                      .drop = df_group_by_drop_default(data)){
   n_dots <- dots_length(...)
   # Error checking on .by
   check_by(data, .by = {{ .by }})
@@ -293,7 +285,7 @@ group_collapse.grouped_df <- function(data, ..., order = TRUE, sort = FALSE,
       order &&
       ascending &&
       sort &&
-      drop == dplyr::group_by_drop_default(data)){
+      .drop == df_group_by_drop_default(data)){
     out <- group_data(data)
     out_nms <- names(out)
     out <- frename(out, .cols = c(".loc" = ".rows"))
@@ -303,15 +295,14 @@ group_collapse.grouped_df <- function(data, ..., order = TRUE, sort = FALSE,
       ncol <- ncol(out)
       out <- fselect(out, .cols = c(seq_len(ncol - 2L), ncol, ncol - 1L))
     }
-    sizes <- collapse::vlengths(out[[".loc"]], use.names = FALSE)
+    sizes <- cheapr::lengths_(out[[".loc"]])
     if (start){
-      gstarts <- integer(length(sizes))
-      gstarts[cpp_which(sizes != 0L)] <- GRP_loc_starts(out[[".loc"]])
+      gstarts <- GRP_loc_starts(out[[".loc"]])
       out[[".start"]] <- gstarts
     }
     if (end){
       gends <- integer(length(sizes))
-      gends[cpp_which(sizes != 0L)] <- GRP_loc_ends(out[[".loc"]])
+      gends[which_(sizes != 0L)] <- GRP_loc_ends(out[[".loc"]])
       out[[".end"]] <- gends
     }
     if (size){
@@ -339,8 +330,8 @@ group_collapse.grouped_df <- function(data, ..., order = TRUE, sort = FALSE,
                                   ascending = ascending,
                                   # loc_order = loc_order,
                                   start = start, end = end,
-                                  drop = drop)
-    attr(out, ".drop") <- drop
+                                  .drop = .drop)
+    attr(out, ".drop") <- .drop
   }
   out
 }

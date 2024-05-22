@@ -33,8 +33,9 @@
 #'
 #' # Manual ECDF plot using only aggregate data
 #' y <- rnorm(100, 10)
-#' grid <- time_span(y, time_by = 0.1, time_floor = TRUE)
-#' counts <- time_countv(y, time_by = 0.1, time_floor = TRUE, complete = TRUE)$n
+#' start <- floor(min(y) / 0.1) * 0.1
+#' grid <- time_span(y, time_by = 0.1, from = start)
+#' counts <- time_countv(y, time_by = 0.1, from = start, complete = TRUE)$n
 #' edf <- edf(grid, wt = counts)
 #' # Trivial here as this is the same
 #' all.equal(unname(cumsum(counts)/sum(counts)), edf)
@@ -63,7 +64,7 @@
 #'}
 #' @export
 edf <- function(x, g = NULL, wt = NULL){
-  n_na <- num_na(x)
+  n_na <- na_count(x)
   nx <- length(x)
   if (is.null(g)){
     x_order <- radix_order(x)
@@ -99,11 +100,7 @@ edf <- function(x, g = NULL, wt = NULL){
     out <- out[radix_order(x_order)]
   } else {
     # Create group IDs
-    df <- data.table::copy(
-      collapse::qDT(
-        do.call(recycle_args, list3(x = x, g = g, wt = wt))
-      )
-    )
+    df <- new_dt(x = x, g = g, wt = wt, .recycle = TRUE)
     df[, ("g") := group_id(.SD, order = FALSE, .cols = names(.SD)),
        .SDcols = "g"]
     df[, ("g1") := group_id(.SD, order = TRUE, .cols = names(.SD)),
@@ -114,10 +111,10 @@ edf <- function(x, g = NULL, wt = NULL){
     df[, ("id") := seq_len(.N)]
     # Order if NAs are shifted to the end
     is_na <- is.na(x)
-    which_na <- cpp_which(is_na)
+    which_na <- which_(is_na)
     df[which_na, ("id") := NA_integer_]
     if (n_na > 0){
-      df <- df[cpp_which(is_na, invert = TRUE)]
+      df <- df[which_(is_na, invert = TRUE)]
     }
     # Sort data in ascending order
     data.table::setorderv(df, cols = "g3")

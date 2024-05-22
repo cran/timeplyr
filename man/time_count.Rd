@@ -2,7 +2,7 @@
 % Please edit documentation in R/time_count.R
 \name{time_count}
 \alias{time_count}
-\title{Fast count time at higher time units.}
+\title{\code{time_count} is deprecated}
 \usage{
 time_count(
   data,
@@ -11,6 +11,7 @@ time_count(
   time_by = NULL,
   from = NULL,
   to = NULL,
+  .name = "{.col}",
   complete = FALSE,
   wt = NULL,
   name = NULL,
@@ -21,130 +22,46 @@ time_count(
   time_type = getOption("timeplyr.time_type", "auto"),
   roll_month = getOption("timeplyr.roll_month", "preday"),
   roll_dst = getOption("timeplyr.roll_dst", "boundary"),
-  include_interval = FALSE
+  as_interval = getOption("timeplyr.use_intervals", FALSE)
 )
 }
 \arguments{
-\item{data}{A data frame.}
+\item{data}{\bold{Deprecated}.}
 
-\item{time}{Time variable.}
+\item{time}{\bold{Deprecated}.}
 
-\item{...}{Additional variables to include.}
+\item{...}{\bold{Deprecated}.}
 
-\item{time_by}{Time unit. \cr
-Must be one of the three:
-\itemize{
-\item string, specifying either the unit or the number and unit, e.g
-\code{time_by = "days"} or \code{time_by = "2 weeks"}
-\item named list of length one, the unit being the name, and
-the number the value of the list, e.g. \code{list("days" = 7)}.
-For the vectorized time functions, you can supply multiple values,
-e.g. \code{list("days" = 1:10)}.
-\item Numeric vector. If time_by is a numeric vector and x is not a date/datetime,
-then arithmetic is used, e.g \code{time_by = 1}.
-}}
+\item{time_by}{\bold{Deprecated}.}
 
-\item{from}{Time series start date. If \code{NULL} then min time is used.}
+\item{from}{\bold{Deprecated}.}
 
-\item{to}{Time series end date. If \code{NULL} then max time is used.}
+\item{to}{\bold{Deprecated}.}
 
-\item{complete}{\bold{Deprecated}.
-Use \code{time_complete()} after \code{time_count()} to
-complete missing gaps in time (as well as optionally expand groups).}
+\item{.name}{\bold{Deprecated}.}
 
-\item{wt}{Frequency weights.
-\code{dplyr} "data-masking" is used for variable selection.
-Can be \code{NULL} or a variable:
-\itemize{
-\item If \code{NULL} (the default), counts the number of rows in each group.
-\item If a variable, computes \code{sum(wt)} for each group.
-}}
+\item{complete}{\bold{Deprecated}.}
 
-\item{name}{Character vector of length 1, specifying the name of
-the new column in the output.}
+\item{wt}{\bold{Deprecated}.}
 
-\item{sort}{If \code{TRUE} the groups with largest counts will be sorted first.
-If \code{FALSE} the result is sorted by groups + time + ... groups.}
+\item{name}{\bold{Deprecated}.}
 
-\item{.by}{(Optional). A selection of columns to group by for this operation.
-Columns are specified using tidy-select.}
+\item{sort}{\bold{Deprecated}.}
 
-\item{time_floor}{Should \code{from} be floored to the nearest unit
-specified through the \code{time_by}
-argument? This is particularly useful for starting
-sequences at the beginning of a week
-or month for example.}
+\item{.by}{\bold{Deprecated}.}
 
-\item{week_start}{day on which week starts following ISO conventions - 1
-means Monday (default), 7 means Sunday.
-This is only used when \code{time_floor = TRUE}.}
+\item{time_floor}{\bold{Deprecated}.}
 
-\item{time_type}{If "auto", \code{periods} are used for
-the time expansion when days, weeks, months or
-years are specified, and \code{durations}
-are used otherwise.}
+\item{week_start}{\bold{Deprecated}.}
 
-\item{roll_month}{Control how impossible dates are handled when
-month or year arithmetic is involved.
-Options are "preday", "boundary", "postday", "full" and "NA".
-See \code{?timechange::time_add} for more details.}
+\item{time_type}{\bold{Deprecated}.}
 
-\item{roll_dst}{See \code{?timechange::time_add} for the full list of details.}
+\item{roll_month}{\bold{Deprecated}.}
 
-\item{include_interval}{Logical. If \code{TRUE} then
-a column "interval" of the form \verb{time_min <= x < time_max} is added
-showing the time interval in which the respective counts belong to.
-The rightmost interval will always be closed.}
-}
-\value{
-An object of class \code{data.frame}
-containing the aggregate time variable and corresponding counts.
+\item{roll_dst}{\bold{Deprecated}.}
+
+\item{as_interval}{\bold{Deprecated}.}
 }
 \description{
-This function operates like \code{dplyr::count()}
-but with emphasis on
-a specified time variable.
-}
-\details{
-\code{time_count} Creates an
-aggregated frequency time series where time
-can be aggregated to
-both lower and higher time units.
-
-An important note is that when the data are grouped, time ranges are expanded
-on a group-by-group basis. \cr
-When groups are supplied through
-\code{...}, the time range of the entire data is used
-to aggregate the time variable.
-}
-\examples{
-library(timeplyr)
-library(dplyr)
-library(lubridate)
-library(nycflights13)
-\dontshow{
-.n_dt_threads <- data.table::getDTthreads()
-.n_collapse_threads <- collapse::get_collapse()$nthreads
-data.table::setDTthreads(threads = 2L)
-collapse::set_collapse(nthreads = 1L)
-}
-df <- flights \%>\%
-  mutate(date = as_date(time_hour)) \%>\%
-  select(year, month, day, origin, dest, date, time_hour)
-
-# By default time_count() guesses the time granularity
-df \%>\%
-  time_count(time_hour)
-# Aggregated to week level
-df \%>\%
-  time_count(time = date, time_by = "2 weeks")
-df \%>\%
-  time_count(time = date, time_by = list("months" = 3),
-             from = dmy("15-01-2013"),
-             time_floor = TRUE,
-             include_interval = TRUE)
-\dontshow{
-data.table::setDTthreads(threads = .n_dt_threads)
-collapse::set_collapse(nthreads = .n_collapse_threads)
-}
+\code{time_count} is deprecated
 }

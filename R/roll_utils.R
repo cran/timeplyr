@@ -19,50 +19,50 @@
 #   out
 # }
 
-flag2 <- function(x, n = 1L, g = NULL, fill = NULL){
-  if (is.null(x)){
-    return(NULL)
-  }
-  check_length(n, 1)
-  n <- as.integer(n)
-  if (is.null(g)){
-    if (n < 0){
-      return(cpp_roll_lead(x, abs(n), fill))
-    } else {
-      return(cpp_roll_lag(x, n, fill))
-    }
-  }
-  o <- radixorderv2(g, starts = FALSE, sort = FALSE, group.sizes = TRUE)
-  if (is_GRP(g)){
-    sizes <- GRP_group_sizes(g)
-  } else {
-    sizes <- attr(o, "group.sizes")
-  }
-  if (n >= 0){
-    cpp_roll_lag_grouped(x, n, o, sizes, fill)
-  } else {
-    cpp_roll_lead_grouped(x, abs(n), o, sizes, fill)
-  }
-}
+# flag2 <- function(x, n = 1L, g = NULL, fill = NULL){
+#   if (is.null(x)){
+#     return(NULL)
+#   }
+#   check_length(n, 1)
+#   n <- as.integer(n)
+#   if (is.null(g)){
+#     if (n < 0){
+#       return(cpp_roll_lead(x, abs(n), fill))
+#     } else {
+#       return(cpp_roll_lag(x, n, fill))
+#     }
+#   }
+#   # o <- radixorderv2(g, starts = FALSE, sort = FALSE, group.sizes = TRUE)
+#   # if (is_GRP(g)){
+#   #   sizes <- GRP_group_sizes(g)
+#   # } else {
+#   #   sizes <- attr(o, "group.sizes")
+#   # }
+#   order_and_counts <- group_order_and_counts(g)
+#   o <- order_and_counts[[1L]]
+#   sizes <- order_and_counts[[2L]]
+#   if (n >= 0){
+#     cpp_roll_lag_grouped(x, n, o, sizes, fill)
+#   } else {
+#     cpp_roll_lead_grouped(x, abs(n), o, sizes, fill)
+#   }
+# }
 
-fdiff2 <- function(x, n = 1L, g = NULL, fill = NULL){
-  if (is.null(x)){
-    return(NULL)
-  }
-  check_length(n, 1)
-  n <- as.integer(n)
-  o <- radixorderv2(g, starts = FALSE, sort = FALSE, group.sizes = TRUE)
-  if (is_GRP(g)){
-    sizes <- GRP_group_sizes(g)
-  } else {
-    sizes <- attr(o, "group.sizes")
-  }
-  if (is.null(g)){
-    cpp_roll_diff(x, k = n, fill = fill)
-  } else {
-    cpp_roll_diff_grouped(x, k = n, fill = fill, o = o, sizes = sizes)
-  }
-}
+# fdiff2 <- function(x, n = 1L, g = NULL, fill = NULL){
+#   if (is.null(x)){
+#     return(NULL)
+#   }
+#   check_length(n, 1)
+#   n <- as.integer(n)
+#   order_and_counts <- group_order_and_counts(g)
+#   o <- order_and_counts[[1L]]
+#   sizes <- order_and_counts[[2L]]
+#   if (is.null(g)){
+#     cpp_roll_diff(x, k = n, fill = fill)
+#   } else {
+#     cpp_roll_diff_grouped(x, k = n, fill = fill, o = o, sizes = sizes)
+#   }
+# }
 
 # Vctrs style rolling chop
 roll_chop <- function(x, sizes = seq_ones(vec_length(x))){
@@ -72,10 +72,10 @@ roll_chop <- function(x, sizes = seq_ones(vec_length(x))){
     stop("length of x must equal length of sizes")
   }
   sizes <- as.integer(sizes)
-  which_size_gt_zero <- cpp_which(sizes > 0L)
-  which_size_zero <- cpp_which(sizes == 0L)
+  which_size_gt_zero <- which_(sizes > 0L)
+  which_size_zero <- which_(sizes == 0L)
   sizes_gt_zero <- sizes[which_size_gt_zero]
-  seq_id_GRP <- sorted_group_id_to_GRP(seq_id(sizes_gt_zero),
+  seq_id_GRP <- sorted_group_id_to_GRP(cheapr::seq_id(sizes_gt_zero),
                                        n_groups = length(sizes_gt_zero),
                                        group_sizes = sizes_gt_zero)
   ind <- collapse::gsplit(sequence(sizes,
@@ -87,68 +87,7 @@ roll_chop <- function(x, sizes = seq_ones(vec_length(x))){
   out[which_size_gt_zero] <- vctrs::vec_chop(x, indices = ind)
   out
 }
-# slider style rolling chop
-roll_chop2 <- function(x, before = 0L, after = 0L, partial = TRUE){
-  complete_size <- before + after
-  x_size <- vec_length(x)
-  if (length(before) == 1L){
-    # before <- flag2(window_sequence(length(x), before,
-    #                                 ascending = TRUE,
-    #                                 partial = TRUE),
-    #                 fill = 0L)
-    before <- before_sequence(x_size, k = before)
-  }
-  if (length(after) == 1L){
-    after <- after_sequence(x_size, k = after)
-    # after <- flag2(window_sequence(length(x),
-    #                                after,
-    #                                ascending = FALSE,
-    #                                partial = TRUE),
-    #                fill = 0L, n = max(-length(x), -1L))
-  }
-  # if (length(before) != length(x)){
-  #   stop("length of before must equal 1 or length(x)")
-  # }
-  # if (length(after) != length(x)){
-  #   stop("length of after must equal 1 or length(x)")
-  # }
-  out <- vector("list", x_size)
-  if (partial){
-    if (is.atomic(x)){
-      for (i in seq_len(x_size)){
-        islice <- seq.int(i - .subset(before, i),
-                          i + .subset(after, i),
-                          by = 1L)
-        out[[i]] <- x[islice]
-      }
-    } else {
-      for (i in seq_len(x_size)){
-        islice <- seq.int(i - .subset(before, i),
-                          i + .subset(after, i),
-                          by = 1L)
-        out[[i]] <- vec_slice2(x, islice)
-      }
-    }
-  } else {
-    which_complete <- collapse::whichv(before + after, complete_size)
-    if (is.atomic(x)){
-      for (i in which_complete){
-        islice <- seq.int(i - .subset(before, i),
-                          i + .subset(after, i),
-                          by = 1L)
-        out[[i]] <- x[islice]
-      }
-    } else {
-      for (i in which_complete){
-        islice <- seq.int(i - .subset(before, i),
-                          i + .subset(after, i),
-                          by = 1L)
-        out[[i]] <- vec_slice2(x, islice)
-      }
-    }
-  }
-  out
-}
+
 # No partial argument, just a weights extension to data.table::frollsum()
 frollsum3 <- function(x, n, weights = NULL, ...){
   if (!is.null(weights)){
@@ -167,6 +106,30 @@ frollmean3 <- function(x, n, weights = NULL, ...){
   }
   out
 }
+# For fun.. A (mostly) base R NA locf/locb
+# Just to show how useful a simple function like consecutive_na_id() can be
+# na_locf <- function(x){
+#   na_id <- cpp_consecutive_na_id(x, TRUE)
+#   i <- seq_along(x) - na_id
+#   i[which_(i == 0L)] <- NA_integer_
+#   x[i]
+#   # na_id <- cpp_consecutive_na_id(x, TRUE)
+#   # i <- seq_len(vec_length(x)) - na_id
+#   # i[which_(i == 0L)] <- NA_integer_
+#   # cheapr::sset(x, i)
+#   # # x[seq_along(x) - na_id]
+# }
+# na_focb <- function(x){
+#   na_id <- cpp_consecutive_na_id(x, FALSE)
+#   i <- seq_along(x) + na_id
+#   i[which_(i == 0L)] <- NA_integer_
+#   x[i]
+#   # na_id <- cpp_consecutive_na_id(x, FALSE)
+#   # i <- seq_len(vec_length(x)) + na_id
+#   # i[which_(i == 0L)] <- NA_integer_
+#   # cheapr::sset(x, i)
+#   # # x[seq_along(x) + na_id]
+# }
 # Mostly base R rolling chop
 # roll_chop3 <- function(x, sizes = collapse::alloc(1L, vec_length(x))){
 #   x_size <- vec_length(x)
@@ -187,7 +150,7 @@ frollmean3 <- function(x, n, weights = NULL, ...){
 #     }
 #   } else {
 #     for (i in seq_len(x_size)){
-#       out[[i]] <- vec_slice2(x, seq_len(.subset(sizes, i)) + (i - .subset(sizes, i)))
+#       out[[i]] <- cheapr::sset(x, seq_len(.subset(sizes, i)) + (i - .subset(sizes, i)))
 #     }
 #   }
 #   out

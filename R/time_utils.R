@@ -22,7 +22,6 @@ unit_list_match <- function(l){
     scale <- .subset2(exotic_info, "scale")
     unit <- .subset2(exotic_info, "unit")
   }
-  # num <- num * scale
   list("unit" = unit,
        "num" = num,
        "scale" = scale)
@@ -58,8 +57,12 @@ unit_parse <- function(x){
                                          text = x))
   }
   num <- as.numeric(num_str)
-  if (length(num) == 0L) num <- 1L
-  if (is_whole_number(num)) num <- as.integer(num)
+  if (length(num) == 0L){
+    num <- 1L
+  }
+  if (is_whole_number(num) && is_integerable(num)){
+    num <- as.integer(num)
+  }
   scale <- 1L
   if (length(num_str) > 0L){
     x <- sub(num_str, "", x, fixed = TRUE) # Remove numbers
@@ -120,7 +123,7 @@ check_time_by_length_is_one <- function(time_by){
     stop("Please supply only one numeric value in time_by")
   }
 }
-time_by_pretty <- function(time_by){
+time_by_pretty <- function(time_by, sep = " "){
   time_by <- time_by_list(time_by)
   units <- names(time_by)
   if (time_by_length(time_by) > 1){
@@ -128,10 +131,14 @@ time_by_pretty <- function(time_by){
   }
   num <- time_by[[1L]]
   if (units == "numeric"){
-    if (num == 1){
+    if (isTRUE(num == 1)){
       paste(num, "numeric unit", sep = " ")
     } else {
-      paste(num, "numeric units", sep = " ")
+      pretty_num <- round(num, 2)
+      if (isTRUE(!cppdoubles::double_equal(num, pretty_num))){
+        pretty_num <- paste0("~", pretty_num)
+      }
+      paste(pretty_num, "numeric units", sep = " ")
     }
   } else {
     num_seconds <- unit_to_seconds(time_by)
@@ -140,43 +147,30 @@ time_by_pretty <- function(time_by){
     higher_unit <- higher_unit_info$unit
     num <- num_seconds / scale
     units <- higher_unit
-    # pretty_unit_info <- seconds_to_unit(num_seconds)
-    # pretty_unit <- sub("(s)", "", pretty_unit_info[["unit"]],
-    #                    fixed = TRUE)
-    # scale <- pretty_unit_info[["scale"]]
-    # pretty_num <- prettyNum(round(num_seconds / scale, 2))
+
     pretty_num <- round(num, 2)
-    if (!cppdoubles::double_equal(num, pretty_num)){
+    if (isTRUE(!cppdoubles::double_equal(num, pretty_num))){
       pretty_num <- paste0("~", pretty_num)
     }
-    if (num == 1){
+    if (isTRUE(num == 1)){
       paste0(plural_unit_to_single(units))
     } else {
-      paste0(pretty_num, " ", units)
+      paste0(pretty_num, sep, units)
     }
   }
 }
-# Creates interval even using num
-time_interval2 <- function(from, to){
-  if (is_time(from) && is_time(to)){
-    out <- lubridate::interval(from, to)
+gcd_time_diff <- function(x){
+  x <- collapse::funique(x)
+  if (length(x) <= 1){
+    out <- 1L
   } else {
-    out <- time_diff(from, to, time_by = 1L)
-    if (length(from) < length(out)){
-      from <- rep_len(from, length(out))
-    }
-    # attr(out, "start") <- from
+    out <- abs(gcd_diff(x))
   }
+  out[cheapr::which_na(out)] <- 1L
   out
 }
 time_granularity <- function(x, msg = TRUE){
-  x <- collapse::funique(x)
-  if (length(x) <= 1){
-    gcd_diff <- 1L
-  } else {
-    gcd_diff <- abs(gcd_diff(x, round = TRUE))
-  }
-  gcd_diff[is.na(gcd_diff)] <- 1
+  gcd_diff <- gcd_time_diff(x)
   if (is_date(x)){
     granularity <- "day(s)"
     scale <- 1L
@@ -209,13 +203,7 @@ time_granularity <- function(x, msg = TRUE){
 }
 # A more focused version
 time_granularity2 <- function(x){
-  x <- collapse::funique(x)
-  if (length(x) <= 1){
-    gcd_diff <- 1L
-  } else {
-    gcd_diff <- abs(gcd_diff(x, round = TRUE))
-  }
-  gcd_diff[is.na(gcd_diff)] <- 1
+  gcd_diff <- gcd_time_diff(x)
   if (is_date(x)){
     unit <- "days"
     scale <- 1
@@ -233,8 +221,20 @@ time_granularity2 <- function(x){
 # Scale is in comparison to seconds
 seconds_to_unit <- function(x){
   if (length(x) == 0L){
-    return(list("unit" = "seconds",
-                "scale" = numeric(0)))
+    return(
+      list(
+        unit = "seconds",
+        scale = numeric()
+      )
+    )
+  }
+  if (length(x) == 1 && is.na(x)){
+    return(
+      list(
+        unit = "seconds",
+        scale = NA_real_
+      )
+    )
   }
   x <- abs(x)
   if (x == 0){
@@ -277,35 +277,6 @@ seconds_to_unit <- function(x){
   list("unit" = unit,
        "scale" = scale)
 }
-# unit_to_seconds <- function(x){
-#   unit_info <- unit_guess(x)
-#   unit <- unit_info[["unit"]]
-#   num <- unit_info[["num"]] * unit_info[["scale"]]
-#   if (unit == "picoseconds"){
-#     scale <- 1/1000/1000/1000/1000
-#   } else if (unit == "nanoseconds"){
-#     scale <- 1/1000/1000/1000
-#   } else if (unit == "microseconds"){
-#     scale <- 1/1000/1000
-#   } else if (unit == "milliseconds"){
-#     scale <- 1/1000
-#   }  else if (unit == "seconds"){
-#     scale <- 1
-#   } else if (unit == "minutes"){
-#     scale <- 60
-#   } else if (unit == "hours"){
-#     scale <- 3600
-#   } else if (unit == "days"){
-#     scale <- 86400
-#   } else if (unit == "weeks"){
-#     scale <- 604800
-#   } else if (unit == "months"){
-#     scale <- 2629800
-#   } else if (unit == "years"){
-#     scale <- 31557600
-#   }
-#   num * scale
-# }
 unit_to_seconds <- function(x){
   unit_info <- unit_guess(x)
   unit <- unit_info[["unit"]]
@@ -340,35 +311,6 @@ guess_seq_type <- function(units){
     "numeric"
   }
 }
-# get_time_type <- function(time_type, time_by){
-#   type <- rlang::arg_match0(time_type, c("auto", "duration", "period"))
-#   if (type == "duration"){
-#     out <- "duration"
-#   }
-#   if (type == "period"){
-#    out <- "period"
-#   }
-#   if (type == "auto"){
-#     if (inherits(time_by, "Duration")){
-#       out <- "Duration"
-#     } else if (inherits(time_by, "Period")){
-#       out <- "Period"
-#     } else {
-#       units <- time_by_unit(time_by)
-#       if (units %in% c("days", "weeks", "months", "years",
-#                        .extra_time_units)){
-#         out <- "period"
-#       } else if (units %in% c("picoseconds", "nanoseconds",
-#                               "microseconds", "milliseconds",
-#                               "seconds", "minutes", "hours")){
-#         out <- "duration"
-#       } else {
-#         out <- "numeric"
-#       }
-#     }
-#   }
-#   out
-# }
 # date_formats_to_try <- c("%Y-%m-%d", "%Y/%m/%d", "%Y%m%d",
 #                          "%d-%m-%Y", "%d/%m/%Y", "%d%m%Y")
 # time_formats_to_try <- c("%Hh%Mm%Ss", " %Hh%Mm%Ss", "%Hh:%Mm:%Ss", " %Hh:%Mm:%Ss",
@@ -380,13 +322,13 @@ convert_common_dates <- function(x){
   if (is_time(x)){
     out <- x
   } else if (is.character(x)){
-    which_na <- cpp_which(is.na(x))
+    which_na <- cheapr::which_na(x)
     out <- lubridate::ymd(x, quiet = TRUE)
-    num_na <- num_na(out)
+    num_na <- na_count(out)
     if (num_na > length(which_na)){
       out <- lubridate::dmy(x, quiet = TRUE)
     }
-    num_na <- num_na(out)
+    num_na <- na_count(out)
     if (num_na > length(which_na)){
       out <- lubridate::Date(length(x))
     }
@@ -399,14 +341,14 @@ convert_common_dates <- function(x){
 period_by_calc <- function(from, to, length){
   seconds_unit <- period_unit("seconds")
   set_recycle_args(from, to, length)
-  which_len_1 <- cpp_which(length == 1)
+  which_len_1 <- which_(length == 1)
   sec_diff <- time_diff(from, to,
                         time_by = list("seconds" = 1),
                         time_type = "period")
   out <- lubridate::seconds_to_period(sec_diff / (length - 1))
   period_info <- collapse::qDF(time_unit_info(out))
   n_unique_slots <- df_ncol(period_info) - rowSums(period_info == 0)
-  which_multi <- cpp_which(n_unique_slots > 1)
+  which_multi <- which_(n_unique_slots > 1)
   out[which_multi] <- seconds_unit(
     lubridate::period_to_seconds(out[which_multi])
   )
@@ -473,13 +415,13 @@ duration_by_calc <- function(from, to, length){
                         time_type = "duration")
   out <- seconds_unit(sec_diff / (length - 1))
   length <- rep_len(length, length(out))
-  out[cpp_which(length == 1)] <- seconds_unit(0) # Special case
+  out[which_(length == 1)] <- seconds_unit(0) # Special case
   out
 }
 num_by_calc <- function(from, to, length){
   out <- (to - from) / (length - 1)
   length <- rep_len(length, length(out))
-  out[cpp_which(length == 1)] <- 0
+  out[which_(length == 1)] <- 0
   out
 }
 # Vectorized except for periods
@@ -536,62 +478,6 @@ duration_unit <- function(units = "seconds"){
 numeric_unit <- function(units){
   identity
 }
-# # Functional that returns lubridate duration function
-# duration_unit <- function(units = "seconds"){
-#   if (length(units) <= 1L){
-#     if (!units %in% .duration_units) unit_match_stop(.duration_units)
-#     switch(units,
-#            picoseconds = lubridate::dpicoseconds,
-#            nanoseconds = lubridate::dnanoseconds,
-#            microseconds = lubridate::dmicroseconds,
-#            milliseconds = lubridate::dmilliseconds,
-#            seconds = lubridate::dseconds,
-#            minutes = lubridate::dminutes,
-#            hours = lubridate::dhours,
-#            days = lubridate::ddays,
-#            weeks = lubridate::dweeks,
-#            months = lubridate::dmonths,
-#            years = lubridate::dyears)
-#   } else {
-#     if (length(setdiff(units, .duration_units)) > 0L) unit_match_stop(.duration_units)
-#     fns_list <- c(lubridate::dpicoseconds,
-#                   lubridate::dnanoseconds,
-#                   lubridate::dmicroseconds,
-#                   lubridate::dmilliseconds,
-#                   lubridate::dseconds,
-#                   lubridate::dminutes,
-#                   lubridate::dhours,
-#                   lubridate::ddays,
-#                   lubridate::dweeks,
-#                   lubridate::dmonths,
-#                   lubridate::dyears)
-#     fns_list[match(units, .duration_units)]
-#   }
-# }
-# # Functional that returns lubridate period function
-# period_unit <- function(units = "seconds"){
-#   if (length(units) <= 1L){
-#     if (!units %in% .period_units) unit_match_stop(.period_units)
-#     switch(units,
-#            seconds = lubridate::seconds,
-#            minutes = lubridate::minutes,
-#            hours = lubridate::hours,
-#            days = lubridate::days,
-#            weeks = lubridate::weeks,
-#            months = months,
-#            years = lubridate::years)
-#   } else {
-#     if (length(setdiff(units, .period_units)) > 0L) unit_match_stop(.period_units)
-#     fns_list <- c(lubridate::seconds,
-#                   lubridate::minutes,
-#                   lubridate::hours,
-#                   lubridate::days,
-#                   lubridate::weeks,
-#                   months,
-#                   lubridate::years)
-#     fns_list[match(units, .period_units)]
-#   }
-# }
 # Functional that returns time unit function
 time_unit <- function(units, time_type = c("duration", "period", "numeric")){
   time_type <- rlang::arg_match0(time_type, c("duration", "period", "numeric"))
@@ -623,17 +509,23 @@ time_cast <- function(x, template){
     }
   } else if (inherits(template, "Date") &&
              !inherits(x, "POSIXt")){
-    if (is.integer(x)){
+    if (identical(class(x), "integer")){
       .Date(x)
     } else {
       lubridate::as_date(x)
     }
+  } else if (inherits(template, "year_month") &&
+           !inherits(x, c("POSIXt", "Date"))){
+    year_month(x)
   } else if (inherits(template, "yearmon") &&
              !inherits(x, c("POSIXt", "Date"))){
     as_yearmon(x)
   } else if (inherits(template, "yearqtr") &&
              !inherits(x, c("POSIXt", "Date", "yearmon"))){
     as_yearqtr(x)
+  } else if (inherits(template, "year_quarter") &&
+             !inherits(x, c("POSIXt", "Date"))){
+    year_quarter(x)
   } else {
     x
   }
@@ -691,11 +583,36 @@ cut_time2 <- function(x, breaks, rightmost.closed = FALSE, left.open = FALSE){
              all.inside = FALSE)
   ]
 }
+# .bincode but with extra features and limited to right-open intervals
+# It can return the breaks as well as the break locations (one or the other)
+# It can also include out-of-bounds values (like in findInterval)
+#
+# To-do:
+# It also always enforces right-open intervals, so the include.lowest argument
+# has been omitted
+# This hasn't been done because users can specify inclusive time end-points
+# Which makes everything complicated. A possible solution would be to
+# make the to argument exclusive and from inclusive. In practice this is messy.
 
-cut_time <- function(x, breaks, include_oob = FALSE, codes = FALSE){
+# include_oob is equivalent to c(breaks, Inf)
+# cpp_bin is basically .bincode with the extra features but isn't limited to
+# right-open intervals
+cut_time <- function(x, breaks, include_oob = FALSE, codes = FALSE, include_lowest = TRUE){
   cpp_bin(x, breaks, codes = codes, right = FALSE,
-          include_lowest = TRUE, include_oob = include_oob)
-}
+          include_oob = include_oob,
+          include_lowest = include_lowest)
+}# cut_time3 <- function(x, breaks, include_oob = FALSE, codes = FALSE,
+#                       include_highest = TRUE){
+#   cpp_right_open_bin(x, breaks, codes = codes,
+#                      include_oob = include_oob,
+#                      include_highest = include_highest)
+# }
+# cut_time3 <- function(x, breaks, include_oob = FALSE, codes = FALSE,
+#                       highest_in_new_interval = FALSE){
+#   cpp_right_open_bin(x, breaks, codes = codes,
+#                      include_oob = include_oob,
+#                      highest_in_new_interval = highest_in_new_interval)
+# }
 # Check for date sequences that should not be coerced to datetimes
 is_special_case_days <- function(from, to, unit, num, time_type){
   time_type == "auto" &&
@@ -747,7 +664,8 @@ as_yearqtr <- function(x){
   }
 }
 is_interval <- function(x){
-  isS4(x) && inherits(x, "Interval")
+  (isS4(x) && inherits(x, "Interval")) ||
+    inherits(x, "time_interval")
 }
 
 # Grouped functions that utilise
@@ -779,13 +697,13 @@ is_interval <- function(x){
 # }
 
 # Convert time sequence to interval
-tseq_interval <- function(x, seq, gx = NULL, gseq = NULL){
-  out <- time_interval2(seq, flag2(seq, n = -1, g = gseq))
-  to <- collapse::fmax(x, g = gx, use.g.names = FALSE, na.rm = TRUE)
-  end_points <- cpp_which(is.na(out) & !is.na(seq))
-  out[end_points] <- time_interval2(seq[end_points], to)
-  out
-}
+# tseq_interval <- function(x, seq, gx = NULL, gseq = NULL){
+#   out <- time_interval2(seq, roll_lag(seq, -1, g = gseq))
+#   to <- collapse::fmax(x, g = gx, use.g.names = FALSE, na.rm = TRUE)
+#   end_points <- which_(is.na(out) & !is.na(seq))
+#   out[end_points] <- time_interval2(seq[end_points], to)
+#   out
+# }
 # Time cut levels from ascending time sequence
 tseq_levels <- function(x, seq, gx = NULL, gseq = NULL, fmt = NULL){
   if (is.null(fmt)){
@@ -798,11 +716,12 @@ tseq_levels <- function(x, seq, gx = NULL, gseq = NULL, fmt = NULL){
   out <- stringr::str_c("[",
                         time_breaks_fmt,
                         ", ",
-                        flag2(time_breaks_fmt,
-                              g = gseq, n = max(-1L, -n)),
+                        roll_lag(time_breaks_fmt,
+                                 max(-1L, -n),
+                                 g = gseq),
                         ")")
   to <- collapse::fmax(x, g = gx, use.g.names = FALSE, na.rm = TRUE)
-  end_points <- cpp_which(is.na(out) & !is.na(seq))
+  end_points <- which_(is.na(out) & !is.na(seq))
   out[end_points] <- stringr::str_c("[",
                                     time_breaks_fmt[end_points],
                                     ", ",
@@ -836,7 +755,8 @@ get_from_to <- function(data, ..., time, from = NULL, to = NULL,
 }
 # Taken from timechange to be used in a tight period sequence loop
 # All credits go to the authors of timechange
-C_time_add <- getFromNamespace("C_time_add", "timechange")
+C_time_add <- get("C_time_add", asNamespace("timechange"), inherits = FALSE)
+
 time_add2 <- function(x, time_by,
                       time_type = getOption("timeplyr.time_type", "auto"),
                       roll_month = getOption("timeplyr.roll_month", "preday"),
@@ -941,15 +861,10 @@ label_date_short <- function(format = c("%Y", "%b", "%d", "%H:%M"),
 # Unique posix vector to character remains unique
 time_as_character <- function(x){
   if (is_datetime(x)){
-    format(x, format = "%Y-%m-%d %H:%M:%S %Z")
+    format(x, usetz = TRUE)
   } else {
     as.character(x)
   }
-}
-# Fast NA check for lubridate intervals
-int_is_na <- function(x){
-  X <- interval_separate(x)
-  is.na(X[[1L]]) & is.na(X[[2L]])
 }
 time_as_number <- function(x){
   strip_attrs(unclass(x))
@@ -963,7 +878,7 @@ time_aggregate_left <- function(x, time_by, g = NULL,
                                 time_type = getOption("timeplyr.time_type", "auto"),
                                 roll_month = getOption("timeplyr.roll_month", "preday"),
                                 roll_dst = getOption("timeplyr.roll_dst", "boundary"),
-                                as_int = TRUE){
+                                as_interval = getOption("timeplyr.use_intervals", FALSE)){
   time_by <- time_by_list(time_by)
   num <- time_by_num(time_by)
   units <- time_by_unit(time_by)
@@ -974,7 +889,7 @@ time_aggregate_left <- function(x, time_by, g = NULL,
       stop("start must be the same length as x")
     }
     start <- time_cast(start, x)
-    x[cpp_which(x < start)] <- time_na
+    x[which_(x < start)] <- time_na
   } else {
     start <- gmin(x, g = g, na.rm = TRUE)
   }
@@ -983,7 +898,7 @@ time_aggregate_left <- function(x, time_by, g = NULL,
       stop("end must be the same length as x")
     }
     end <- time_cast(end, x)
-    x[cpp_which(x > end)] <- time_na
+    x[which_(x > end)] <- time_na
   } else {
     end <- gmax(x, g = g, na.rm = TRUE)
   }
@@ -995,75 +910,69 @@ time_aggregate_left <- function(x, time_by, g = NULL,
   time_to_add <- add_names(list(trunc2(tdiff) * num), units)
   out <- time_add2(start, time_by = time_to_add, time_type = time_type,
                    roll_month = roll_month, roll_dst = roll_dst)
-  if (as_int){
-    int_end <- time_add2(out, time_by = time_by, time_type = time_type,
-                         roll_month = roll_month, roll_dst = roll_dst)
-    set_time_cast(out, int_end)
-    end <- time_cast(end, out)
-    which_out_of_bounds <- cpp_which(cppdoubles::double_gt(unclass(int_end),
-                                                           unclass(end)))
-    int_end[which_out_of_bounds] <- end[which_out_of_bounds]
-    out <- structure(out,
-                     end = int_end,
-                     direction = "left-to-right")
+  if (as_interval){
+    out <- time_by_interval(out, time_by = time_by,
+                            time_type = time_type,
+                            roll_month = roll_month,
+                            roll_dst = roll_dst)
   }
   out
 }
 # Important that this holds:
 # length(x) == length(start) == length(end)
-time_aggregate_right <- function(x, time_by, g = NULL,
-                                 start = NULL, end = NULL,
-                                 time_ceiling = FALSE,
-                                 week_start = getOption("lubridate.week.start", 1),
-                                 time_type = getOption("timeplyr.time_type", "auto"),
-                                 roll_month = getOption("timeplyr.roll_month", "preday"),
-                                 roll_dst = getOption("timeplyr.roll_dst", "boundary"),
-                                 as_int = TRUE){
-  time_by <- time_by_list(time_by)
-  num <- time_by_num(time_by)
-  units <- time_by_unit(time_by)
-  time_na <- na_init(x)
-  g <- GRP2(g, return.groups = FALSE)
-  if (!is.null(start)){
-    if (length(start) != length(x)){
-      stop("start must be the same length as x")
-    }
-    start <- time_cast(start, x)
-    x[cpp_which(x < start)] <- time_na
-  } else {
-    start <- gmin(x, g = g, na.rm = TRUE)
-  }
-  if (!is.null(end)){
-    if (length(end) != length(x)){
-      stop("end must be the same length as x")
-    }
-    end <- time_cast(end, x)
-    x[cpp_which(x > end)] <- time_na
-  } else {
-    end <- gmax(x, g = g, na.rm = TRUE)
-  }
-  if (time_ceiling){
-    start <- time_ceiling2(start, time_by = time_by,
-                           week_start = week_start)
-  }
-  tdiff <- time_diff(end, x, time_by = time_by, time_type = time_type)
-  time_to_add <- add_names(list(trunc2(tdiff) * num), units)
-  out <- time_add2(end, time_by = time_to_add, time_type = time_type,
-                   roll_month = roll_month, roll_dst = roll_dst)
-  if (as_int){
-    int_end <- time_add2(out, time_by = time_by, time_type = time_type,
-                         roll_month = roll_month, roll_dst = roll_dst)
-    set_time_cast(out, int_end)
-    start <- time_cast(start, out)
-    which_out_of_bounds <- cpp_which(cppdoubles::double_lt(unclass(int_end),
-                                                           unclass(start)))
-    int_end[which_out_of_bounds] <- start[which_out_of_bounds]
-    out <- structure(out,
-                     end = int_end,
-                     direction = "right-to-left")
-  }
-  out
-}
+# time_aggregate_right <- function(x, time_by, g = NULL,
+#                                  start = NULL, end = NULL,
+#                                  time_ceiling = FALSE,
+#                                  week_start = getOption("lubridate.week.start", 1),
+#                                  time_type = getOption("timeplyr.time_type", "auto"),
+#                                  roll_month = getOption("timeplyr.roll_month", "preday"),
+#                                  roll_dst = getOption("timeplyr.roll_dst", "boundary"),
+#                                  as_int = TRUE){
+#   time_by <- time_by_list(time_by)
+#   num <- time_by_num(time_by)
+#   units <- time_by_unit(time_by)
+#   time_na <- na_init(x)
+#   g <- GRP2(g, return.groups = FALSE)
+#   if (!is.null(start)){
+#     if (length(start) != length(x)){
+#       stop("start must be the same length as x")
+#     }
+#     start <- time_cast(start, x)
+#     x[which_(x < start)] <- time_na
+#   } else {
+#     start <- gmin(x, g = g, na.rm = TRUE)
+#   }
+#   if (!is.null(end)){
+#     if (length(end) != length(x)){
+#       stop("end must be the same length as x")
+#     }
+#     end <- time_cast(end, x)
+#     x[which_(x > end)] <- time_na
+#   } else {
+#     end <- gmax(x, g = g, na.rm = TRUE)
+#   }
+#   if (time_ceiling){
+#     start <- time_ceiling2(start, time_by = time_by,
+#                            week_start = week_start)
+#   }
+#   tdiff <- time_diff(end, x, time_by = time_by, time_type = time_type)
+#   time_to_add <- add_names(list(trunc2(tdiff) * num), units)
+#   out <- time_add2(end, time_by = time_to_add, time_type = time_type,
+#                    roll_month = roll_month, roll_dst = roll_dst)
+#   if (as_int){
+#     int_end <- time_add2(out, time_by = time_by, time_type = time_type,
+#                          roll_month = roll_month, roll_dst = roll_dst)
+#     set_time_cast(out, int_end)
+#     start <- time_cast(start, out)
+#     which_out_of_bounds <- which_(cppdoubles::double_lt(unclass(int_end),
+#                                                            unclass(start)))
+#     int_end[which_out_of_bounds] <- start[which_out_of_bounds]
+#     out <- structure(out,
+#                      end = int_end,
+#                      direction = "right-to-left")
+#   }
+#   out
+# }
 time_int_end <- function(x){
   attr(x, "end")
 }
@@ -1077,90 +986,90 @@ time_int_rm_attrs <- function(x){
 # the time_by argument is positive
 
 # Time aggregation using expanded sequences from data directly
-time_aggregate_expand <- function(x, time_by, g = NULL,
-                                  start = NULL, end = NULL,
-                                  time_floor = FALSE,
-                                  week_start = getOption("lubridate.week.start", 1),
-                                  time_type = getOption("timeplyr.time_type", "auto"),
-                                  roll_month = getOption("timeplyr.roll_month", "preday"),
-                                  roll_dst = getOption("timeplyr.roll_dst", "boundary"),
-                                  as_int = TRUE){
-  time_by <- time_by_list(time_by)
-  num <- time_by_num(time_by)
-  units <- time_by_unit(time_by)
-  time_na <- na_init(x)
-  no_groups <- is.null(g)
-  g <- GRP2(g)
-  if (no_groups){
-    n_groups <- min(1L, length(x))
-    group_sizes <- length(x)
-    group_starts <- n_groups
-  } else {
-    n_groups <- GRP_n_groups(g)
-    group_sizes <- GRP_group_sizes(g)
-    group_starts <- GRP_starts(g)
-  }
-  if (is.null(start)){
-    start <- gmin(x, g = g, na.rm = TRUE)
-  } else {
-    if (length(start) != length(x)){
-      stop("start must be the same length as x")
-    }
-    start <- time_cast(start, x)
-    x[cpp_which(x < start)] <- time_na
-  }
-  if (is.null(end)){
-    end <- gmax(x, g = g, na.rm = TRUE)
-  } else {
-    if (length(end) != length(x)){
-      stop("end must be the same length as x")
-    }
-    end <- time_cast(end, x)
-    x[cpp_which(x > end)] <- time_na
-  }
-  .start <- start[group_starts]
-  .end <- end[group_starts]
-  if (time_floor){
-    .start <- time_floor2(.start, time_by = time_by, week_start = week_start)
-  }
-  seq_sizes <- time_seq_sizes(.start, .end, time_by, time_type = time_type)
-  time_full <- time_seq_v2(seq_sizes, from = .start,
-                           time_by = time_by,
-                           time_type = time_type,
-                           time_floor = FALSE,
-                           week_start = week_start,
-                           roll_month = roll_month,
-                           roll_dst = roll_dst)
-  group_id <- rep.int(seq_len(n_groups), times = seq_sizes)
-  # Creating a GRP object from scratch
-  g2 <- sorted_group_id_to_GRP(group_id,
-                               n_groups = n_groups,
-                               group_sizes = seq_sizes)
-  x <- time_cast(x, time_full)
-  if (no_groups){
-    out <- cut_time(x, time_full, include_oob = TRUE)
-  } else {
-    out <- bin_grouped(x, gx = g,
-                       breaks = time_full, gbreaks = g2,
-                       right = FALSE, include_lowest = FALSE,
-                       codes = FALSE, include_oob = TRUE)
-    out <- collapse::greorder(out, g = g)
-  }
-  out <- time_cast(out, time_full)
-  if (as_int){
-    int_end <- time_add2(out, time_by = time_by, time_type = time_type,
-                         roll_month = roll_month, roll_dst = roll_dst)
-    set_time_cast(out, int_end)
-    end <- time_cast(end, out)
-    which_out_of_bounds <- cpp_which(cppdoubles::double_gt(time_as_number(int_end),
-                                                           time_as_number(end)))
-    int_end[which_out_of_bounds] <- end[which_out_of_bounds]
-    out <- structure(out,
-                     end = int_end,
-                     direction = "left-to-right")
-  }
-  out
-}
+# time_aggregate_expand <- function(x, time_by, g = NULL,
+#                                   start = NULL, end = NULL,
+#                                   time_floor = FALSE,
+#                                   week_start = getOption("lubridate.week.start", 1),
+#                                   time_type = getOption("timeplyr.time_type", "auto"),
+#                                   roll_month = getOption("timeplyr.roll_month", "preday"),
+#                                   roll_dst = getOption("timeplyr.roll_dst", "boundary"),
+#                                   as_int = TRUE){
+#   time_by <- time_by_list(time_by)
+#   num <- time_by_num(time_by)
+#   units <- time_by_unit(time_by)
+#   time_na <- na_init(x)
+#   no_groups <- is.null(g)
+#   g <- GRP2(g)
+#   if (no_groups){
+#     n_groups <- min(1L, length(x))
+#     group_sizes <- length(x)
+#     group_starts <- n_groups
+#   } else {
+#     n_groups <- GRP_n_groups(g)
+#     group_sizes <- GRP_group_sizes(g)
+#     group_starts <- GRP_starts(g)
+#   }
+#   if (is.null(start)){
+#     start <- gmin(x, g = g, na.rm = TRUE)
+#   } else {
+#     if (length(start) != length(x)){
+#       stop("start must be the same length as x")
+#     }
+#     start <- time_cast(start, x)
+#     x[which_(x < start)] <- time_na
+#   }
+#   if (is.null(end)){
+#     end <- gmax(x, g = g, na.rm = TRUE)
+#   } else {
+#     if (length(end) != length(x)){
+#       stop("end must be the same length as x")
+#     }
+#     end <- time_cast(end, x)
+#     x[which_(x > end)] <- time_na
+#   }
+#   .start <- start[group_starts]
+#   .end <- end[group_starts]
+#   if (time_floor){
+#     .start <- time_floor2(.start, time_by = time_by, week_start = week_start)
+#   }
+#   seq_sizes <- time_seq_sizes(.start, .end, time_by, time_type = time_type)
+#   time_full <- time_seq_v2(seq_sizes, from = .start,
+#                            time_by = time_by,
+#                            time_type = time_type,
+#                            time_floor = FALSE,
+#                            week_start = week_start,
+#                            roll_month = roll_month,
+#                            roll_dst = roll_dst)
+#   group_id <- rep.int(seq_len(n_groups), times = seq_sizes)
+#   # Creating a GRP object from scratch
+#   g2 <- sorted_group_id_to_GRP(group_id,
+#                                n_groups = n_groups,
+#                                group_sizes = seq_sizes)
+#   x <- time_cast(x, time_full)
+#   if (no_groups){
+#     out <- cut_time(x, time_full, include_oob = TRUE)
+#   } else {
+#     out <- bin_grouped(x, gx = g,
+#                        breaks = time_full, gbreaks = g2,
+#                        right = FALSE, include_lowest = FALSE,
+#                        codes = FALSE, include_oob = TRUE)
+#     out <- collapse::greorder(out, g = g)
+#   }
+#   out <- time_cast(out, time_full)
+#   if (as_int){
+#     int_end <- time_add2(out, time_by = time_by, time_type = time_type,
+#                          roll_month = roll_month, roll_dst = roll_dst)
+#     set_time_cast(out, int_end)
+#     end <- time_cast(end, out)
+#     which_out_of_bounds <- which_(cppdoubles::double_gt(time_as_number(int_end),
+#                                                            time_as_number(end)))
+#     int_end[which_out_of_bounds] <- end[which_out_of_bounds]
+#     out <- structure(out,
+#                      end = int_end,
+#                      direction = "left-to-right")
+#   }
+#   out
+# }
 
 # Time aggregation using expanded sequences when:
 # * Data is over 100k rows
@@ -1274,7 +1183,7 @@ as_int_date <- function(x){
   out
 }
 check_time_not_missing <- function(x){
-  if (anyNA(x)){
+  if (cheapr::any_na(x)){
     stop("time index must not contain NA values")
   }
 }
@@ -1301,9 +1210,9 @@ multiply_single_unit_period_by_number <- function(per, num){
   num[is.infinite(num)] <- NA_real_
   per_num <- per_num * num
   per_length <- length(per_num)
-  per_num[cpp_which(is.nan(per_num))] <- NA_real_
+  per_num[which_(is.nan(per_num))] <- NA_real_
   other_fill <- integer(per_length)
-  other_fill[cpp_which(is.na(per_num))] <- NA_integer_
+  other_fill[cheapr::which_na(per_num)] <- NA_integer_
   switch(
     per_unit,
     years = {
@@ -1428,26 +1337,37 @@ adj_dur_est <- function (est, start, end, per){
   up_date <- time_add2(start,
                        # est * per)
                        multiply_single_unit_period_by_number(per, est),
-                       time_type = "period")
-  while (length(which <- cpp_which(up_date < end))) {
+                       time_type = "period",
+                       ### NOT SURE ABOUT THE BELOW roll_dst LINE
+                       roll_dst = "xfirst")
+  # up_date2 <- up_date
+  while (length(which <- which_(up_date < end))) {
+    # up_date2 <- up_date
     est[which] <- est[which] + 1
-    up_date[which] <- time_add2(up_date[which],
-                                # est[which] * per[which])
-                                multiply_single_unit_period_by_number(per[which], est[which]),
-                                time_type = "period")
+    up_date[which] <- time_add(start[which],
+
+    # As as 20-March-2024 lubridate uses the below line
+    # Which I think is likely wrong and a typo...
+    # It was causing incorrect hourly time differences
+    # Between 2 date-times after DST
+
+    # up_date[which] <- time_add(up_date[which],
+                                period_to_list(
+                                  multiply_single_unit_period_by_number(per[which], est[which])
+                                  ))
   }
   low_date <- up_date
-  while (length(which <- cpp_which(low_date > end))) {
+  while (length(which <- which_(low_date > end))) {
     est[which] <- est[which] - 1
     up_date[which] <- low_date[which]
-    low_date[which] <- time_add2(start[which],
-                                 # est[which] * per[which])
-                                 multiply_single_unit_period_by_number(per[which], est[which]),
-                                 time_type = "period")
+    low_date[which] <- time_add(start[which],
+                                 period_to_list(
+                                   multiply_single_unit_period_by_number(per[which], est[which])
+                                   ))
   }
   frac <- strip_attrs(unclass(difftime(end, low_date, units = "secs"))) /
     strip_attrs(unclass(difftime(up_date, low_date, units = "secs")))
-  frac[cpp_which(low_date == up_date)] <- 0
+  frac[which_(low_date == up_date)] <- 0
   est + frac
 }
 # Faster method for interval(start, end) / period() when period
@@ -1459,13 +1379,13 @@ divide_interval_by_period2 <- function(start, end, per){
   estimate <- (time_as_number(as_datetime2(end)) -
                  time_as_number(as_datetime2(start)) ) / unit_to_seconds(per)
   max_len <- max(length(start), length(end), length(per))
-  timespans <- recycle_args(start, end, length = max_len)
+  timespans <- recycle(start = start, end = end, length = max_len)
   # Here we make sure to use rep method for lubridate periods
   timespans[[3]] <- rep_single_unit_period(per, length.out = max_len)
-  if (num_na(estimate) == 0) {
+  if (na_count(estimate) == 0) {
     adj_dur_est(estimate, timespans[[1]], timespans[[2]], timespans[[3]])
   } else {
-    not_nas <- cpp_which(is.na(estimate), invert = TRUE)
+    not_nas <- cheapr::which_not_na(estimate)
     start2 <- timespans[[1]][not_nas]
     end2 <- timespans[[2]][not_nas]
     per2 <- timespans[[3]][not_nas]
@@ -1510,7 +1430,7 @@ days_in_month <- function (m, y) {
                         Dec = 31L
   )
   n_days <- N_DAYS_IN_MONTHS[m]
-  n_days[cpp_which(m == 2L & lubridate::leap_year(y))] <- 29L
+  n_days[which_(m == 2L & lubridate::leap_year(y))] <- 29L
   n_days
 }
 int_to_per <- function (start, end){
@@ -1521,8 +1441,8 @@ int_to_per <- function (start, end){
   start <- unclass(as.POSIXlt(start))
   end <- unclass(as.POSIXlt(end))
   negs <- duration < 0
-  wnegs <- cpp_which(negs)
-  wnnegs <- cpp_which(negs, invert = TRUE)
+  wnegs <- which_(negs)
+  wnnegs <- which_(negs, invert = TRUE)
   per <- list()
   for (nm in c("sec", "min", "hour", "mday", "mon", "year")) {
     per[[nm]] <- integer(length(negs))
@@ -1532,32 +1452,32 @@ int_to_per <- function (start, end){
   names(per) <- c("second", "minute", "hour", "day", "month",
                   "year")
   nsecs <- per$second < 0
-  wnsecs <- cpp_which(nsecs)
+  wnsecs <- which_(nsecs)
   per$second[wnsecs] <- 60 + per$second[wnsecs]
   per$minute[wnsecs] <- per$minute[wnsecs] - 1
   per$second[wnegs] <- -per$second[wnegs]
   nmins <- per$minute < 0
-  wnmins <- cpp_which(nmins)
+  wnmins <- which_(nmins)
   per$minute[wnmins] <- 60 + per$minute[wnmins]
   per$hour[wnmins] <- per$hour[wnmins] - 1
   per$minute[wnegs] <- -per$minute[wnegs]
   nhous <- per$hour < 0
-  wnhous <- cpp_which(nhous)
+  wnhous <- which_(nhous)
   per$hour[wnhous] <- 24 + per$hour[wnhous]
   per$hour[wnegs] <- -per$hour[wnegs]
   ndays <- !negs & per$day < 0
-  wndays <- cpp_which(ndays)
+  wndays <- which_(ndays)
   if (length(wndays) > 0) {
     add_months <- rep.int(-1, sum(ndays, na.rm = TRUE))
     pmonth <- end$mon[wndays]
-    pmonth[cpp_which(pmonth == 0)] <- 1
+    pmonth[which_(pmonth == 0)] <- 1
     prev_month_days <- days_in_month(pmonth, end$year[wndays])
     per$day[wndays] <- pmax(prev_month_days - start$mday[wndays],
                             0) + end$mday[wndays]
     per$month[wndays] <- per$month[wndays] + add_months
   }
   ndays <- negs & per$day < 0
-  wndays <- cpp_which(ndays)
+  wndays <- which_(ndays)
   if (length(wndays) > 0) {
     add_months <- rep.int(1L, sum(ndays, na.rm = TRUE))
     this_month_days <- days_in_month(end$mon[wndays] + 1,
@@ -1569,7 +1489,7 @@ int_to_per <- function (start, end){
   per$day[wnhous] <- per$day[wnhous] - 1
   per$day[wnegs] <- -per$day[wnegs]
   nmons <- per$month < 0
-  wnmons <- cpp_which(nmons)
+  wnmons <- which_(nmons)
   per$month[wnmons] <- 12 + per$month[wnmons]
   per$year[wnmons] <- per$year[wnmons] - 1
   per$month[wnegs] <- -per$month[wnegs]
@@ -1577,4 +1497,13 @@ int_to_per <- function (start, end){
   per
 }
 
-
+# Convenience function to return base time unit of time variable
+get_time_unit <- function(x){
+  if (is_date(x)){
+    "days"
+  } else if (is_datetime(x)){
+   "seconds"
+  } else {
+    "numeric"
+  }
+}

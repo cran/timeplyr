@@ -106,9 +106,9 @@ time_is_regular <- function(x, time_by = NULL,
                            na_skip = na.rm,
                            fill = 0)
   if (na.rm){
-    roll_time_diff <- fdiff2(roll_na_fill(telapsed, g = g), fill = 0, g = g)
+    roll_time_diff <- roll_diff(roll_na_fill(telapsed, g = g), fill = 0, g = g)
   } else {
-    roll_time_diff <- fdiff2(telapsed, fill = 0, g = g)
+    roll_time_diff <- roll_diff(telapsed, fill = 0, g = g)
   }
   # out <- vapply(collapse::gsplit(telapsed, g = g),
   #               function(x) is_whole_number(x, na.rm = na.rm),
@@ -116,7 +116,7 @@ time_is_regular <- function(x, time_by = NULL,
   # double_equal(telapsed, round(telapsed))
   is_whole_num <- are_whole_numbers(telapsed)
   if (na.rm){
-    is_whole_num[collapse::whichNA(is_whole_num)] <- TRUE
+    is_whole_num[cheapr::which_na(is_whole_num)] <- TRUE
   }
   n_whole_num <- collapse::fsum(is_whole_num, g = g, use.g.names = FALSE,
                                 na.rm = na.rm, fill = FALSE)

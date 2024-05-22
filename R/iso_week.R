@@ -32,12 +32,13 @@
 #'}
 #' @export
 iso_week <- function(x, year = TRUE, day = FALSE){
-  w <- lubridate::isoweek(x)
+  posix <- as.POSIXlt(x)
+  w <- lubridate::isoweek(posix)
   if (year){
-    y <- lubridate::isoyear(x)
+    y <- lubridate::isoyear(posix)
   }
   if (day){
-    d <- isoday(x)
+    d <- isoday(posix)
   }
   if (year && day){
     out <- sprintf("%.4d-W%02d-%d", y, w, d)
@@ -48,14 +49,14 @@ iso_week <- function(x, year = TRUE, day = FALSE){
   } else {
     out <- sprintf("W%02d", w)
   }
-  out[is.na(w)] <- NA_character_
+  out[cheapr::which_na(w)] <- NA_character_
   out
 }
 #' @rdname iso_week
 #' @export
 isoday <- function(x){
   out <- data.table::wday(x) - 1L
-  out[collapse::whichv(out, 0L)] <- 7L
+  out[which_val(out, 0L)] <- 7L
   out
 }
 # Integer isoweek
@@ -65,7 +66,7 @@ isoday <- function(x){
 #   m <- x$mon + 1L
 #   d <- x$mday
 #   wday <- x$wday
-#   wday[cpp_which(wday == 0L)] <- 7L
+#   wday[which_(wday == 0L)] <- 7L
 #   date <- as_int_date(lubridate::make_date(y, m, d))
 #   date <- date + (4L - wday)
 #   jan1 <- as.integer(lubridate::make_date(as.POSIXlt(date)$year + 1900L, 1L, 1L))

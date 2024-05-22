@@ -17,10 +17,12 @@ stat_summarise(
   stat = c("n", "nmiss", "ndistinct"),
   q_probs = NULL,
   na.rm = TRUE,
-  sort = TRUE,
+  sort = df_group_by_order_default(data),
+  .count_name = NULL,
   .names = NULL,
   .by = NULL,
   .cols = NULL,
+  inform_stats = TRUE,
   as_tbl = FALSE
 )
 
@@ -44,6 +46,8 @@ If supplied, \code{q_summarise()} is called and added to the result.}
 
 \item{sort}{Should groups be sorted? Default is \code{TRUE}.}
 
+\item{.count_name}{Name of count column, default is "n".}
+
 \item{.names}{An optional glue specification passed to \code{stringr::glue()}.
 If \code{.names = NULL}, then when there is 1 variable, the function name
 is used, i.e \code{.names = "{.fn}"}, when there are multiple variables and
@@ -57,6 +61,9 @@ Columns are specified using tidy-select.}
 \item{.cols}{(Optional) alternative to \code{...} that accepts
 a named character vector or numeric vector.
 If speed is an expensive resource, it is recommended to use this.}
+
+\item{inform_stats}{Should available stat functions be displayed
+at the start of each session? Default is \code{TRUE}.}
 
 \item{as_tbl}{Should the result be a \code{tibble}? Default is \code{FALSE}.}
 }

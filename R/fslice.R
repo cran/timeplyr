@@ -88,8 +88,11 @@
 #' @export
 fslice <- function(data, ..., .by = NULL,
                    keep_order = FALSE, sort_groups = TRUE){
-  dots <- list(...)
-  n <- unlist(dots, recursive = TRUE, use.names = FALSE)
+  if (dots_length(...) == 1){
+    n <- list(...)[[1L]]
+  } else {
+    n <- c(...)
+  }
   N <- df_nrow(data)
   if (length(n) == 0L){
     n <- 0L
@@ -104,7 +107,7 @@ fslice <- function(data, ..., .by = NULL,
   group_vars <- get_groups(data, .by = {{ .by }})
   if (length(group_vars) == 0L){
     if (any(abs(rng) > N)){
-      i <- n[cpp_which(data.table::between(n, -N, N))]
+      i <- n[which_(data.table::between(n, -N, N))]
     } else {
       i <- n
     }
@@ -116,7 +119,7 @@ fslice <- function(data, ..., .by = NULL,
                                size = TRUE, start = FALSE, end = FALSE)
     # Constrain n to <= max GRPN
     GN <-  max(group_df[[".size"]])
-    n <- n[cpp_which(data.table::between(n, -GN, GN))]
+    n <- n[which_(data.table::between(n, -GN, GN))]
     rows <- group_df[[".loc"]]
     row_lens <- group_df[[".size"]]
     if (slice_sign >= 1){
@@ -124,7 +127,7 @@ fslice <- function(data, ..., .by = NULL,
     } else {
       size <- pmax.int(0L, row_lens - max(abs(n)))
     }
-    keep <- cpp_which(size > 0)
+    keep <- which_(size > 0)
     if (length(rows) - length(keep) > 0L){
       rows <- rows[keep]
       row_lens <- row_lens[keep]
@@ -132,12 +135,12 @@ fslice <- function(data, ..., .by = NULL,
     }
     if (length(n) == 1 && slice_sign >= 1){
       i <- list_subset(rows, n)
-      i <- i[cpp_which(is.na(i), invert = TRUE)]
+      i <- i[cheapr::which_not_na(i)]
     } else {
       i <- vector("list", length(rows))
       for (j in seq_along(i)){
         i[[j]] <- .subset(.subset2(rows, j),
-                          .subset(n, cpp_which(n <= .subset2(row_lens, j))))
+                          .subset(n, which_(n <= .subset2(row_lens, j))))
       }
       i <- unlist(i, use.names = FALSE, recursive = FALSE)
     }
@@ -164,11 +167,15 @@ fslice_head <- function(data, ..., n, prop, .by = NULL,
   # Start indices of sequences
   start <- calc_sorted_group_starts(group_sizes)
   # Vectorised sequences
-  sequences <- sequence(slice_sizes, from = start, by = 1L)
-  if (length(slice_sizes) > 1L){
-    i <- unlist(slice_info[["rows"]], recursive = FALSE, use.names = FALSE)[sequences]
+  if (length(slice_sizes) == 1){
+    i <- seq_len(slice_sizes)
   } else {
-    i <- sequences
+    sequences <- sequence(slice_sizes, from = start, by = 1L)
+    if (length(slice_sizes) > 1L){
+      i <- unlist(slice_info[["rows"]], recursive = FALSE, use.names = FALSE)[sequences]
+    } else {
+      i <- sequences
+    }
   }
   if (keep_order){
     i <- conditional_sort(i)
@@ -188,10 +195,14 @@ fslice_tail <- function(data, ..., n, prop, .by = NULL,
   slice_sizes <- slice_info[["slice_sizes"]]
   start <- calc_sorted_group_ends(group_sizes)
   sequences <- sequence(slice_sizes, from = start - slice_sizes + 1L, by = 1L)
-  if (length(slice_sizes) > 1L){
-    i <- unlist(slice_info[["rows"]], recursive = FALSE, use.names = FALSE)[sequences]
+  if (length(slice_sizes) == 1){
+    i <- (start -slice_sizes + 1L):start
   } else {
-    i <- sequences
+    if (length(slice_sizes) > 1L){
+      i <- unlist(slice_info[["rows"]], recursive = FALSE, use.names = FALSE)[sequences]
+    } else {
+      i <- sequences
+    }
   }
   if (keep_order){
     i <- conditional_sort(i)
@@ -209,11 +220,12 @@ fslice_min <- function(data, order_by, ..., n, prop, .by = NULL,
   out <- safe_ungroup(data)
   g1 <- group_id(data, .by = {{ .by }}, order = sort_groups)
   out[[grp_nm1]] <- g1
-  out <- mutate2(out,
-                 !!enquo(order_by),
-                 .keep = "none",
-                 .by = all_of(grp_nm1))
-  order_by_nm <- tidy_transform_names(data, !!enquo(order_by))
+  out_info <- mutate_summary_grouped(out,
+                                     !!enquo(order_by),
+                                     .keep = "none",
+                                     .by = all_of(grp_nm1))
+  out <- out_info[["data"]]
+  order_by_nm <- out_info[["cols"]]
   row_nm <- new_var_nm(names(out), "row_id")
   out[[row_nm]] <- df_seq_along(out)
   g2 <- group_id(out[[order_by_nm]])
@@ -228,13 +240,15 @@ fslice_min <- function(data, order_by, ..., n, prop, .by = NULL,
   out1 <- fslice_head(out, n = n, prop = prop, .by = all_of(grp_nm1),
                       sort_groups = sort_groups)
   if (with_ties){
-    i <- out[[row_nm]][cpp_which(out[[grp_nm]] %in% out1[[grp_nm]])]
+    i <- out[[row_nm]][cheapr::which_not_na(
+      collapse::fmatch(out[[grp_nm]], out1[[grp_nm]], overid = 2L)
+    )]
   } else {
     i <- out1[[row_nm]]
   }
   if (na_rm){
-    i2 <- out[[row_nm]][cpp_which(is.na(out[[order_by_nm]]))]
-    i <- setdiff(i, i2)
+    i2 <- out[[row_nm]][cheapr::which_na(out[[order_by_nm]])]
+    i <- cheapr::setdiff_(i, i2)
   }
   if (is.null(i)){
     i <- integer(0)
@@ -255,11 +269,12 @@ fslice_max <- function(data, order_by, ..., n, prop, .by = NULL,
   out <- safe_ungroup(data)
   g1 <- group_id(data, .by = {{ .by }}, order = sort_groups)
   out[[grp_nm1]] <- g1
-  out <- mutate2(out,
-                 !!enquo(order_by),
-                 .keep = "none",
-                 .by = all_of(grp_nm1))
-  order_by_nm <- tidy_transform_names(data, !!enquo(order_by))
+  out_info <- mutate_summary_grouped(out,
+                                     !!enquo(order_by),
+                                     .keep = "none",
+                                     .by = all_of(grp_nm1))
+  out <- out_info[["data"]]
+  order_by_nm <- out_info[["cols"]]
   row_nm <- new_var_nm(names(out), "row_id")
   out[[row_nm]] <- df_seq_along(out)
   g2 <- group_id(out[[order_by_nm]], ascending = FALSE)
@@ -274,13 +289,15 @@ fslice_max <- function(data, order_by, ..., n, prop, .by = NULL,
   out1 <- fslice_head(out, n = n, prop = prop, .by = all_of(grp_nm1),
                       sort_groups = sort_groups)
   if (with_ties){
-    i <- out[[row_nm]][cpp_which(out[[grp_nm]] %in% out1[[grp_nm]])]
+    i <- out[[row_nm]][cheapr::which_not_na(
+      collapse::fmatch(out[[grp_nm]], out1[[grp_nm]], overid = 2L)
+    )]
   } else {
     i <- out1[[row_nm]]
   }
   if (na_rm){
-    i2 <- out[[row_nm]][cpp_which(is.na(out[[order_by_nm]]))]
-    i <- setdiff(i, i2)
+    i2 <- out[[row_nm]][cheapr::which_na(out[[order_by_nm]])]
+    i <- cheapr::setdiff_(i, i2)
   }
   if (is.null(i)){
     i <- integer(0)
@@ -306,8 +323,9 @@ fslice_sample <- function(data, n, replace = FALSE, prop,
   seed_is_null <- is.null(seed)
   has_weights <- !rlang::quo_is_null(enquo(weights))
   if (has_weights){
-    data <- mutate2(data, !!enquo(weights))
-    weights_var <- tidy_transform_names(data, !!enquo(weights))
+    data_info  <- mutate_summary_grouped(data, !!enquo(weights))
+    data <- data_info[["data"]]
+    weights_var <- data_info[["cols"]]
   }
   slice_info <- df_slice_prepare(data, n, prop,
                                  .by = {{ .by }},
@@ -319,7 +337,7 @@ fslice_sample <- function(data, n, replace = FALSE, prop,
   rows <- vector("list", length(slice_info[["rows"]]))
   if (has_weights){
     g <- group_id(data, .by = {{ .by }}, order = sort_groups)
-    weights <- collapse::gsplit(data[[weights_var]], g = g)
+    weights <- gsplit2(data[[weights_var]], g = g)
   } else {
     weights <- NULL
   }
@@ -344,8 +362,8 @@ fslice_sample <- function(data, n, replace = FALSE, prop,
   }
   rows <- unlist(rows, use.names = FALSE, recursive = FALSE)
   if (length(rows) > 0L){
-    rows <- rows + rep.int(c(0L, cumsum(group_sizes)[-length(group_sizes)]),
-                           times = slice_sizes)
+      rows <- rows + rep.int(calc_sorted_group_starts(group_sizes, 0L),
+                             times = slice_sizes)
   }
   i <- unlist(slice_info[["rows"]], use.names = FALSE, recursive = FALSE)[rows]
   if (is.null(i)){
@@ -413,7 +431,7 @@ df_slice_prepare <- function(data, n, prop, .by = NULL, sort_groups = TRUE,
     }
     slice_sizes <- as.integer(slice_sizes)
   }
-  keep <- cpp_which(slice_sizes > 0)
+  keep <- which_(slice_sizes > 0)
   if (length(rows) - length(keep) > 0L){
     rows <- rows[keep]
     group_sizes <- group_sizes[keep]

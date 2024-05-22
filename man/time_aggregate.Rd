@@ -7,11 +7,14 @@
 time_aggregate(
   x,
   time_by = NULL,
-  g = NULL,
+  from = NULL,
+  to = NULL,
   time_type = getOption("timeplyr.time_type", "auto"),
   roll_month = getOption("timeplyr.roll_month", "preday"),
   roll_dst = getOption("timeplyr.roll_dst", "boundary"),
-  direction = c("l2r", "r2l")
+  time_floor = FALSE,
+  week_start = getOption("lubridate.week.start", 1),
+  as_interval = getOption("timeplyr.use_intervals", FALSE)
 )
 }
 \arguments{
@@ -28,8 +31,9 @@ Must be one of the following:
 \item Numeric vector, e.g. \code{time_by = 7}.
 }}
 
-\item{g}{Grouping object passed directly to \code{collapse::GRP()}.
-This can for example be a vector or data frame.}
+\item{from}{Start.}
+
+\item{to}{End.}
 
 \item{time_type}{If "auto", \code{periods} are used for
 the time expansion when days, weeks, months or years are specified,
@@ -40,13 +44,21 @@ month or year arithmetic is involved.}
 
 \item{roll_dst}{See \code{?timechange::time_add} for the full list of details.}
 
-\item{direction}{Direction with which to aggregate time,
-"l2r" ("left-to-right") or "r2l" ("right-to-left").
-If "l2r" (the default), then the minimum time is used as the
-reference time, otherwise the maximum time is used.}
+\item{time_floor}{Should \code{from} be floored to the nearest unit specified
+through the \code{time_by} argument?
+This is particularly useful for starting sequences at the
+beginning of a week or month for example.}
+
+\item{week_start}{day on which week starts following ISO conventions - 1
+means Monday (default), 7 means Sunday.
+This is only used when \code{time_floor = TRUE}.}
+
+\item{as_interval}{Should result be a \code{time_interval}?
+Default is \code{TRUE}. \cr
+This can be controlled globally through \code{options(timeplyr.use_intervals)}.}
 }
 \value{
-A time aggregated vector the same class and length as \code{x}.
+A \code{time_interval}.
 }
 \description{
 Aggregate time to a higher unit for possibly many groups
@@ -59,15 +71,9 @@ distinct moving time range blocks of a specified time unit.
 The actual calculation is extremely simple and essentially requires
 a subtraction, a rounding and an addition.
 
-If for example \code{time_by = "week"} then all dates or datetimes
-will be shifted backwards (or forwards if direction is "r2l") to the
-nearest start of the week, where the start of week is based on \code{min(x)}.
-This is identical to building a weekly sequence and using this as
-breakpoints to cut \code{x}. No time expansion occurs so this is very efficient
-except when \code{periods} are used and there is a lot of data.
-In this case, provided the expansion is not too big,
-it may be more efficient to cut the data using the period sequence which can
-be achieved using \code{time_summarisev}.
+To perform a by-group time aggregation, simply supply
+\code{collapse::fmin(x, g = groups, TRA = "replace_fill")} as the
+\code{from} argument.
 }
 \examples{
 library(timeplyr)
@@ -86,23 +92,22 @@ hours <- sunique(flights$time_hour)
 days <- as_date(hours)
 
 # Aggregate by week or any time unit easily
-unique(time_aggregate(hours, "week"))
-unique(time_aggregate(hours, ddays(14)))
-unique(time_aggregate(hours, "month"))
-unique(time_aggregate(days, "month"))
+sunique(time_aggregate(hours, "week"))
+sunique(time_aggregate(hours, ddays(14)))
+sunique(time_aggregate(hours, "month"))
+sunique(time_aggregate(days, "month"))
 
 # Left aligned
-unique(time_aggregate(days, "quarter"))
-# Right aligned
-unique(time_aggregate(days, "quarter", direction = "r2l"))
+sunique(time_aggregate(days, "quarter"))
 
 # Very fast by group aggregation
+start <- collapse::fmin(flights$time_hour, g = flights$tailnum,
+                        TRA = "replace_fill")
 week_by_tailnum <- time_aggregate(flights$time_hour, time_by = ddays(7),
-                                  g = flights$tailnum)
+                                  from = start)
 # Confirm this has been done by group as each group will have a
 # Different aggregate start date
 flights \%>\%
-  mutate(week_by_tailnum) \%>\%
   stat_summarise(week_by_tailnum, .by = tailnum, stat = "min",
                  sort = FALSE)
 \dontshow{
@@ -111,5 +116,5 @@ collapse::set_collapse(nthreads = .n_collapse_threads)
 }
 }
 \seealso{
-\link{time_summarisev}
+\link{time_summarisev} \link{time_cut}
 }

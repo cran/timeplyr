@@ -1,7 +1,4 @@
-#include <cpp11.hpp>
-#include <Rinternals.h>
-
-#define R_NO_REMAP
+#include "timeplyr_cpp.h"
 
 // Returns true if all numbers are whole numbers
 // otherwise false

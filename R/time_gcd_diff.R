@@ -2,7 +2,7 @@
 #'
 #' @param x Time variable. \cr
 #' Can be a `Date`, `POSIXt`, `numeric`, `integer`, `yearmon`, or `yearqtr`.
-#' @param time_by Time unit (default is 1). \cr
+#' @param time_by Time unit. \cr
 #' Must be one of the following:
 #' * string, specifying either the unit or the number and unit, e.g
 #' `time_by = "days"` or `time_by = "2 weeks"`
@@ -15,12 +15,10 @@
 #' @param time_type If "auto", `periods` are used if `x` is a Date and
 #' durations are used if `x` is a datetime.
 #' Otherwise numeric differences are calculated.
-#' @param tol Tolerance of comparison. The time differences are rounded
-#' using `digits = ceiling(abs(log10(tol)))` to try and avoid
-#' precision issues.
+#' @param tol Numeric tolerance for gcd algorithm.
 #'
 #' @returns
-#' A double vector of length 1 or length 0 if `length(x)` is 0.
+#' A list of length 1.
 #'
 #' @examples
 #' library(timeplyr)
@@ -32,36 +30,43 @@
 #' data.table::setDTthreads(threads = 2L)
 #' collapse::set_collapse(nthreads = 1L)
 #' }
-#' time_diff_gcd(1:10)
-#' time_diff_gcd(seq(0, 1, 0.2))
+#' time_gcd_diff(1:10)
+#' time_gcd_diff(seq(0, 1, 0.2))
 #'
-#' time_diff_gcd(time_seq(today(), today() + 100, time_by = "3 days"))
-#' time_diff_gcd(time_seq(now(), len = 10^2, time_by = "125 seconds"))
+#' time_gcd_diff(time_seq(today(), today() + 100, time_by = "3 days"))
+#' time_gcd_diff(time_seq(now(), len = 10^2, time_by = "125 seconds"))
 #'
 #' # Monthly gcd using lubridate periods
 #' quarter_seq <- time_seq(today(), len = 24, time_by = months(4))
-#' time_diff_gcd(quarter_seq, time_by = months(1))
-#' time_diff_gcd(quarter_seq, time_by = "months", time_type = "duration")
+#' time_gcd_diff(quarter_seq, time_by = months(1), time_type = "period")
+#' time_gcd_diff(quarter_seq, time_by = "months", time_type = "duration")
 #'
 #' # Detects monthly granularity
-#' double_equal(time_diff_gcd(as.vector(time(AirPassengers))), 1/12)
+#' double_equal(time_gcd_diff(as.vector(time(AirPassengers))), 1/12)
 #' \dontshow{
 #' data.table::setDTthreads(threads = .n_dt_threads)
 #' collapse::set_collapse(nthreads = .n_collapse_threads)
 #'}
 #' @export
-time_diff_gcd <- function(x, time_by = 1,
+time_gcd_diff <- function(x, time_by = NULL,
                           time_type = getOption("timeplyr.time_type", "auto"),
                           tol = sqrt(.Machine$double.eps)){
+   if (tby_missing <- is.null(time_by)){
+    time_unit <- get_time_unit(x)
+  }
   x <- collapse::funique(x, sort = FALSE)
+  time_by <- time_by_get(x, time_by = time_by)
+  if (!tby_missing){
+    time_unit <- time_by_unit(time_by)
+  }
   if (length(x) == 1L && is.na(x)){
-    return(NA_real_)
+    return(add_names(list(NA_real_), time_unit))
   }
   if (length(x) == 1L ||
       # Check that the first value is NA since
       # time_elapsed with rolling = F compares to first value
       (length(x) == 2 && is.na(x[1L]))){
-    return(1)
+    return(add_names(list(1), time_unit))
   }
   tdiff <- time_elapsed(x, rolling = FALSE,
                         time_by = time_by,
@@ -69,15 +74,12 @@ time_diff_gcd <- function(x, time_by = 1,
                         g = NULL,
                         na_skip = TRUE)
   tdiff <- diff_(tdiff, 1L, fill = 0)
-  log10_tol <- ceiling(abs(log10(tol)))
-  if (is.double(tdiff)){
-    tdiff <- round(abs(tdiff), digits = log10_tol + 1)
-  }
-  gcd(tdiff, tol = tol, na_rm = TRUE, round = FALSE)
+  gcd <- cheapr::gcd(tdiff, tol = tol, na_rm = TRUE, round = FALSE)
+  add_names(list(time_by_num(time_by) * gcd), time_unit)
 }
 
 # Previous method
-# time_diff_gcd2 <- function(x, time_by = 1,
+# time_gcd_diff2 <- function(x, time_by = 1,
 #                           time_type = getOption("timeplyr.time_type", "auto"),
 #                           is_sorted = FALSE,
 #                           tol = sqrt(.Machine$double.eps)){
@@ -107,7 +109,7 @@ time_diff_gcd <- function(x, time_by = 1,
 #       abs(tdiff), digits = log10_tol
 #     )
 #   )
-#   tdiff <- tdiff[cpp_which(double_gt(tdiff, 0, tol = tol))]
+#   tdiff <- tdiff[which_(double_gt(tdiff, 0, tol = tol))]
 #   if (length(tdiff) == 1 && tdiff == Inf){
 #     return(10^(-log10_tol))
 #   }

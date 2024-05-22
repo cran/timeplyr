@@ -1,34 +1,34 @@
 ##### data.table specific helpers #####
 
-# set_dt_threads <- function(threads = 1L){
-#   setDTthreads <- try(get("setDTthreads", asNamespace("data.table")))
-#   if (exists("setDTthreads", inherits = FALSE)){
-#     setDTthreads(threads = threads)
-#   }
-# }
-
-# Convert to data table
-as_DT <- function(x){
-  if (inherits(x, "data.table")){
-    x[TRUE]
-  } else if (inherits(x, "data.frame") &&
-             collapse::fncol(x) > 0L){
-    collapse::qDT(x[TRUE])
-  } else {
-    data.table::as.data.table(x)
-  }
+empty_dt <- function(){
+  out <- list()
+  class(out) <- c("data.table", "data.frame")
+  data.table::setalloccol(out)
+  out
+  # collapse::qDT(empty_df()) # Faster
 }
-# df_complete_cases <- function(data, .cols = names(data)){
-#   df_row_slice(data, vctrs::vec_detect_complete(
-#     fselect(data, .cols = .cols)
-#   ))
-#   # df_row_slice(data, collapse::whichv(rowSums(is.na(
-#   #   fselect(data, .cols = .cols)
-#   # )), 0))
-# }
 
+# This makes a copy
+# Also data.tables currently can't have (n > 0) x 0 structure
+new_dt <- function(..., .copy = TRUE, .recycle = FALSE){
+  df_as_dt(
+    new_df(..., .recycle = .recycle),
+    .copy = .copy
+  )
+}
+
+df_as_dt <- function(x, .copy = TRUE){
+  out <- x
+  if (.copy){
+    out <- cpp_copy(out)
+  }
+  # Prefer collapse::qDT() to data.table::setalloccol()
+  # Because the latter destroys time intervals
+  out <- collapse::qDT(out, keep.attr = TRUE)
+  data.table::setattr(out, "row.names", attr(x, "row.names"))
+  out
+}
 # key and sort with na.last argument
-#
 # When cols = character(0) nothing is changed
 # When cols = NULL the key is removed
 setorderv2 <- function(x, cols, order = 1L, na.last = TRUE){
@@ -65,17 +65,17 @@ set_rm_cols <- function(DT, cols = NULL){
 set_add_cols <- function(DT, cols = NULL){
   data.table::set(DT, j = names(cols), value = cols)
 }
-
-# Data.table version of bind_cols, needs more work
-# set_bind_cols <- function(x, y,
-#                           suffix = ".y"){
-#   if (missing(y)) return(x)
-#   x_nms <- names(x)
-#   y_nms <- names(y)
-#   common_cols <- intersect(x_nms, y_nms)
-#   suffix <- rep_len(suffix, length(common_cols))
-#   new_col_nms <- paste0(common_cols, suffix)
-#   y_nms[y_nms %in% common_cols] <- new_col_nms
-#   names(y) <- y_nms
-#   data.table::set(x, j = y_nms, value = y)[]
-# }
+#' @exportS3Method dplyr::dplyr_col_modify
+dplyr_col_modify.data.table <- function(data, cols){
+  cols <- vctrs::vec_recycle_common(!!!cols, .size = df_nrow(data))
+  out <- as.list(vctrs::vec_data(data))
+  nms <- rlang::as_utf8_character(rlang::names2(cols))
+  names(out) <- rlang::as_utf8_character(rlang::names2(out))
+  for (i in seq_along(cols)) {
+    nm <- nms[[i]]
+    out[[nm]] <- cols[[i]]
+  }
+  row_names <- .row_names_info(data, type = 0L)
+  out <- vctrs::new_data_frame(out, n = df_nrow(data), row.names = row_names)
+  dplyr::dplyr_reconstruct(out, data)
+}
