@@ -139,7 +139,7 @@ time_cut <- function(x, n = 5, time_by = NULL,
                      week_start = getOption("lubridate.week.start", 1),
                      time_type = getOption("timeplyr.time_type", "auto"),
                      roll_month = getOption("timeplyr.roll_month", "preday"),
-                     roll_dst = getOption("timeplyr.roll_dst", "boundary"),
+                     roll_dst = getOption("timeplyr.roll_dst", "NA"),
                      as_interval = getOption("timeplyr.use_intervals", FALSE)){
   if (is.null(to)){
     to <- collapse::fmax(x, na.rm = TRUE)
@@ -154,7 +154,7 @@ time_cut <- function(x, n = 5, time_by = NULL,
   time_breaks <- breaks_list[["breaks"]]
   x <- time_cast(x, time_breaks)
   to <- time_cast(to, x)
-  out <- cut_time(time_cast(x, time_breaks), breaks = c(unclass(time_breaks), unclass(to)), codes = FALSE)
+  out <- cut_time(x, breaks = c(unclass(time_breaks), unclass(to)), codes = FALSE)
   if (as_interval){
     out <- time_by_interval(out, time_by = breaks_list[["time_by"]],
                             time_type = time_type,
@@ -194,28 +194,28 @@ time_cut <- function(x, n = 5, time_by = NULL,
 #' @rdname time_cut
 #' @export
 time_breaks <- function(x, n = 5, time_by = NULL,
+                        from = NULL, to = NULL,
+                        time_floor = FALSE,
+                        week_start = getOption("lubridate.week.start", 1),
+                        time_type = getOption("timeplyr.time_type", "auto"),
+                        roll_month = getOption("timeplyr.roll_month", "preday"),
+                        roll_dst = getOption("timeplyr.roll_dst", "NA")){
+  out <- .time_breaks(x, n = n, time_by = time_by,
+                      from = from, to = to,
+                      time_floor = time_floor,
+                      week_start = week_start,
+                      time_type = time_type,
+                      roll_month = roll_month,
+                      roll_dst = roll_dst)
+  out[["breaks"]]
+}
+.time_breaks <- function(x, n = 5, time_by = NULL,
                          from = NULL, to = NULL,
                          time_floor = FALSE,
                          week_start = getOption("lubridate.week.start", 1),
                          time_type = getOption("timeplyr.time_type", "auto"),
                          roll_month = getOption("timeplyr.roll_month", "preday"),
                          roll_dst = getOption("timeplyr.roll_dst", "boundary")){
-  out <- .time_breaks(x, n = n, time_by = time_by,
-                           from = from, to = to,
-                           time_floor = time_floor,
-                           week_start = week_start,
-                           time_type = time_type,
-                           roll_month = roll_month,
-                           roll_dst = roll_dst)
-  out[["breaks"]]
-}
-.time_breaks <- function(x, n = 5, time_by = NULL,
-                        from = NULL, to = NULL,
-                        time_floor = FALSE,
-                        week_start = getOption("lubridate.week.start", 1),
-                        time_type = getOption("timeplyr.time_type", "auto"),
-                        roll_month = getOption("timeplyr.roll_month", "preday"),
-                        roll_dst = getOption("timeplyr.roll_dst", "boundary")){
   check_is_time_or_num(x)
   check_is_num(n)
   stopifnot(n >= 1)

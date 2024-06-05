@@ -90,7 +90,7 @@ time_aggregate <- function(x, time_by = NULL,
                            from = NULL, to = NULL,
                            time_type = getOption("timeplyr.time_type", "auto"),
                            roll_month = getOption("timeplyr.roll_month", "preday"),
-                           roll_dst = getOption("timeplyr.roll_dst", "boundary"),
+                           roll_dst = getOption("timeplyr.roll_dst", "NA"),
                            time_floor = FALSE,
                            week_start = getOption("lubridate.week.start", 1),
                            as_interval = getOption("timeplyr.use_intervals", FALSE)){
@@ -103,6 +103,8 @@ time_aggregate <- function(x, time_by = NULL,
   time_by <- time_by_get(start, time_by = time_by)
   ## This uses a breakpoints-cut method which is much more efficient
   ## when there are relatively small numbers of breaks and large data
+  ## Also, timechange natively handles the case when dates are updated
+  ## using seconds to other dates without final output being a datetime
   if (time_by_unit(time_by) %!in_%
       c("picoseconds", "nanoseconds", "microseconds",
         "milliseconds", "seconds", "minutes", "hours") &&
