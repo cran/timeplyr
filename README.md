@@ -55,6 +55,9 @@ library(tidyverse)
 #> ✖ dplyr::filter() masks stats::filter()
 #> ✖ dplyr::lag()    masks stats::lag()
 #> ℹ Use the conflicted package (<http://conflicted.r-lib.org/>) to force all conflicts to become errors
+```
+
+``` r
 eu_stock <- EuStockMarkets %>%
   ts_as_tibble()
 eu_stock
@@ -107,18 +110,18 @@ flights_monthly
 #> # Time:     time_intv_month [12]
 #> # By:       month
 #> # Span:     2013-01-01 - 2013-12-31
-#>    date       arr_delay time_intv_month
-#>    <date>         <dbl> <date>         
-#>  1 2013-01-01        11 2013-01-01     
-#>  2 2013-01-01        20 2013-01-01     
-#>  3 2013-01-01        33 2013-01-01     
-#>  4 2013-01-01       -18 2013-01-01     
-#>  5 2013-01-01       -25 2013-01-01     
-#>  6 2013-01-01        12 2013-01-01     
-#>  7 2013-01-01        19 2013-01-01     
-#>  8 2013-01-01       -14 2013-01-01     
-#>  9 2013-01-01        -8 2013-01-01     
-#> 10 2013-01-01         8 2013-01-01     
+#>    date       arr_delay          time_intv_month
+#>    <date>         <dbl>                <tm_intv>
+#>  1 2013-01-01        11 [2013-01-01, 2013-02-01)
+#>  2 2013-01-01        20 [2013-01-01, 2013-02-01)
+#>  3 2013-01-01        33 [2013-01-01, 2013-02-01)
+#>  4 2013-01-01       -18 [2013-01-01, 2013-02-01)
+#>  5 2013-01-01       -25 [2013-01-01, 2013-02-01)
+#>  6 2013-01-01        12 [2013-01-01, 2013-02-01)
+#>  7 2013-01-01        19 [2013-01-01, 2013-02-01)
+#>  8 2013-01-01       -14 [2013-01-01, 2013-02-01)
+#>  9 2013-01-01        -8 [2013-01-01, 2013-02-01)
+#> 10 2013-01-01         8 [2013-01-01, 2013-02-01)
 #> # ℹ 336,766 more rows
 ```
 
@@ -130,20 +133,20 @@ flights_monthly %>%
   summarise(n = n(),
             mean_arr_delay = mean(arr_delay, na.rm = TRUE))
 #> # A tibble: 12 × 3
-#>    time_intv_month     n mean_arr_delay
-#>    <date>          <int>          <dbl>
-#>  1 2013-01-01      27004          6.13 
-#>  2 2013-02-01      24951          5.61 
-#>  3 2013-03-01      28834          5.81 
-#>  4 2013-04-01      28330         11.2  
-#>  5 2013-05-01      28796          3.52 
-#>  6 2013-06-01      28243         16.5  
-#>  7 2013-07-01      29425         16.7  
-#>  8 2013-08-01      29327          6.04 
-#>  9 2013-09-01      27574         -4.02 
-#> 10 2013-10-01      28889         -0.167
-#> 11 2013-11-01      27268          0.461
-#> 12 2013-12-01      28135         14.9
+#>             time_intv_month     n mean_arr_delay
+#>                   <tm_intv> <int>          <dbl>
+#>  1 [2013-01-01, 2013-02-01) 27004          6.13 
+#>  2 [2013-02-01, 2013-03-01) 24951          5.61 
+#>  3 [2013-03-01, 2013-04-01) 28834          5.81 
+#>  4 [2013-04-01, 2013-05-01) 28330         11.2  
+#>  5 [2013-05-01, 2013-06-01) 28796          3.52 
+#>  6 [2013-06-01, 2013-07-01) 28243         16.5  
+#>  7 [2013-07-01, 2013-08-01) 29425         16.7  
+#>  8 [2013-08-01, 2013-09-01) 29327          6.04 
+#>  9 [2013-09-01, 2013-10-01) 27574         -4.02 
+#> 10 [2013-10-01, 2013-11-01) 28889         -0.167
+#> 11 [2013-11-01, 2013-12-01) 27268          0.461
+#> 12 [2013-12-01, 2014-01-01) 28135         14.9
 ```
 
 If the time unit is left unspecified, the `time` functions try to find
@@ -172,7 +175,7 @@ flights %>%
 #> # ℹ 13 more variables: arr_delay <dbl>, carrier <chr>, flight <int>,
 #> #   tailnum <chr>, origin <chr>, dest <chr>, air_time <dbl>, distance <dbl>,
 #> #   hour <dbl>, minute <dbl>, time_hour <dttm>, date <date>,
-#> #   time_intv_hour <dttm>
+#> #   time_intv_hour <tm_intv>
 ```
 
 ## `time_complete()`
@@ -212,6 +215,9 @@ interval_count(quarters)
 #> 2 [2013-04-01, 2013-07-01) 85369
 #> 3 [2013-07-01, 2013-10-01) 86326
 #> 4 [2013-10-01, 2014-01-01) 84292
+```
+
+``` r
 
 # Or simply
 flights %>%
@@ -241,18 +247,18 @@ flights %>%
 #> # Time:     time_intv_week [52]
 #> # By:       week
 #> # Span:     2013-01-13 - 2013-12-31
-#>    time_intv_week     n
-#>    <date>         <int>
-#>  1 2013-01-13      6076
-#>  2 2013-01-20      6012
-#>  3 2013-01-27      6072
-#>  4 2013-02-03      6089
-#>  5 2013-02-10      6217
-#>  6 2013-02-17      6349
-#>  7 2013-02-24      6411
-#>  8 2013-03-03      6551
-#>  9 2013-03-10      6556
-#> 10 2013-03-17      6549
+#>              time_intv_week     n
+#>                   <tm_intv> <int>
+#>  1 [2013-01-13, 2013-01-20)  6076
+#>  2 [2013-01-20, 2013-01-27)  6012
+#>  3 [2013-01-27, 2013-02-03)  6072
+#>  4 [2013-02-03, 2013-02-10)  6089
+#>  5 [2013-02-10, 2013-02-17)  6217
+#>  6 [2013-02-17, 2013-02-24)  6349
+#>  7 [2013-02-24, 2013-03-03)  6411
+#>  8 [2013-03-03, 2013-03-10)  6551
+#>  9 [2013-03-10, 2013-03-17)  6556
+#> 10 [2013-03-17, 2013-03-24)  6549
 #> # ℹ 42 more rows
 ```
 
@@ -274,15 +280,27 @@ To check for regularity use `time_is_regular`
 hours <- sort(flights$time_hour)
 time_is_regular(hours, time_by = "hours")
 #> [1] TRUE
+```
+
+``` r
 time_is_regular(hours, time_by = "hours", allow_gaps = FALSE)
 #> [1] FALSE
+```
+
+``` r
 time_is_regular(hours, time_by = "hours", allow_dups = FALSE)
 #> [1] FALSE
+```
+
+``` r
 
 # By-group
 time_num_gaps(flights$time_hour, g = flights$origin, time_by = "hours")
 #>  EWR  JFK  LGA 
 #> 2489 1820 2468
+```
+
+``` r
 time_is_regular(flights$time_hour, g = flights$origin, time_by = "hours")
 #>   EWR   JFK   LGA 
 #> FALSE FALSE FALSE
@@ -390,12 +408,18 @@ g <- cheapr::seq_id(c(3, 5)) # Two groups of size 3 + 5
 #> End = 8 
 #> Frequency = 1 
 #> [1] NA  3  4  4  6  6  6  8
+```
+
+``` r
 roll_na_fill(x, fill_limit = 1) # Fill up to 1 NA
 #> Time Series:
 #> Start = 1 
 #> End = 8 
 #> Frequency = 1 
 #> [1] NA  3  4  4  6  6 NA  8
+```
+
+``` r
 
 roll_na_fill(x, g = g) # Very efficient on large data too
 #> Time Series:
@@ -413,7 +437,7 @@ inspired by the excellent ‘zoo’ and ‘tsibble’ packages.
 ``` r
 today <- today()
 year_month(today)
-#> [1] "2024 Jun"
+#> [1] "2024 Aug"
 ```
 
 The underlying data for a `year_month` is the number of months since 1
@@ -422,6 +446,9 @@ January 1970 (epoch).
 ``` r
 unclass(year_month("1970-01-01"))
 #> [1] 0
+```
+
+``` r
 unclass(year_month("1971-01-01"))
 #> [1] 12
 ```
@@ -430,11 +457,14 @@ To create a sequence of ‘year_months’, one can use base arithmetic
 
 ``` r
 year_month(today) + 0:12
-#>  [1] "2024 Jun" "2024 Jul" "2024 Aug" "2024 Sep" "2024 Oct" "2024 Nov"
-#>  [7] "2024 Dec" "2025 Jan" "2025 Feb" "2025 Mar" "2025 Apr" "2025 May"
-#> [13] "2025 Jun"
+#>  [1] "2024 Aug" "2024 Sep" "2024 Oct" "2024 Nov" "2024 Dec" "2025 Jan"
+#>  [7] "2025 Feb" "2025 Mar" "2025 Apr" "2025 May" "2025 Jun" "2025 Jul"
+#> [13] "2025 Aug"
+```
+
+``` r
 year_quarter(today) + 0:4
-#> [1] "2024 Q2" "2024 Q3" "2024 Q4" "2025 Q1" "2025 Q2"
+#> [1] "2024 Q3" "2024 Q4" "2025 Q1" "2025 Q2" "2025 Q3"
 ```
 
 ## `time_elapsed()`
@@ -466,6 +496,9 @@ all_flights <- flights %>%
 all_flights <- all_flights %>%
   mutate(elapsed = time_elapsed(time_hour, g = flight, fill = 0))
 #> Assuming a time granularity of 1 hour(s)
+```
+
+``` r
 
 # Flight numbers with largest relative deviation in time between flights
 all_flights %>%
@@ -540,6 +573,9 @@ flights_calendar %>%
 #>  9    2013       9  6444
 #> 10    2013      10  6546
 #> # ℹ 43 more rows
+```
+
+``` r
 flights_calendar %>% 
   fcount(isoweek = iso_week(time))
 #> # A tibble: 53 × 2
@@ -556,6 +592,9 @@ flights_calendar %>%
 #>  9 2013-W09  6444
 #> 10 2013-W10  6546
 #> # ℹ 43 more rows
+```
+
+``` r
 flights_calendar %>% 
   fcount(month_l)
 #> # A tibble: 12 × 2
@@ -608,6 +647,9 @@ seq(start, end, by = "month") # Base R version
 #>  [1] "2020-01-31" "2020-03-02" "2020-03-31" "2020-05-01" "2020-05-31"
 #>  [6] "2020-07-01" "2020-07-31" "2020-08-31" "2020-10-01" "2020-10-31"
 #> [11] "2020-12-01" "2020-12-31" "2021-01-31"
+```
+
+``` r
 time_seq(start, end, time_by = "month") # lubridate version
 #>  [1] "2020-01-31" "2020-02-29" "2020-03-31" "2020-04-30" "2020-05-31"
 #>  [6] "2020-06-30" "2020-07-31" "2020-08-31" "2020-09-30" "2020-10-31"
@@ -642,6 +684,9 @@ time_seq_v(from = start,
 #> [11] "2020-11-30" "2020-12-31" "2021-01-31" "2020-01-31" "2020-03-31"
 #> [16] "2020-05-31" "2020-07-31" "2020-09-30" "2020-11-30" "2021-01-31"
 #> [21] "2020-01-31" "2020-04-30" "2020-07-31" "2020-10-31" "2021-01-31"
+```
+
+``` r
 # Equivalent to 
 c(time_seq(start, end, time_by = "month"),
   time_seq(start, end, time_by = "2 months"),
@@ -662,6 +707,9 @@ seq_lengths <- time_seq_sizes(start, start + days(c(1, 10, 20)),
                               time_by = list("days" = c(1, 5, 10)))
 seq_lengths
 #> [1] 2 3 3
+```
+
+``` r
 
 # Use time_seq_v2() if you know the sequence lengths
 seqs <- time_seq_v2(seq_lengths, start, time_by = list("days" = c(1, 5, 10)))
@@ -677,10 +725,16 @@ time_seq(start, end, time_by = "month", roll_month = "postday") # roll impossibl
 #>  [1] "2020-01-31" "2020-03-01" "2020-03-31" "2020-05-01" "2020-05-31"
 #>  [6] "2020-07-01" "2020-07-31" "2020-08-31" "2020-10-01" "2020-10-31"
 #> [11] "2020-12-01" "2020-12-31" "2021-01-31"
+```
+
+``` r
 time_seq(start, end, time_by = "month", roll_month = "NA") # no roll
 #>  [1] "2020-01-31" NA           "2020-03-31" NA           "2020-05-31"
 #>  [6] NA           "2020-07-31" "2020-08-31" NA           "2020-10-31"
 #> [11] NA           "2020-12-31" "2021-01-31"
+```
+
+``` r
 
 time_seq(start, end, time_by = dmonths(1)) # lubridate version with durations
 #>  [1] "2020-01-31 00:00:00 UTC" "2020-03-01 10:30:00 UTC"
@@ -698,11 +752,17 @@ Simple function to get formatted ISO weeks.
 
 ``` r
 iso_week(today())
-#> [1] "2024-W23"
+#> [1] "2024-W33"
+```
+
+``` r
 iso_week(today(), day = TRUE)
-#> [1] "2024-W23-2"
+#> [1] "2024-W33-6"
+```
+
+``` r
 iso_week(today(), year = FALSE)
-#> [1] "W23"
+#> [1] "W33"
 ```
 
 ## `time_cut()`
@@ -722,7 +782,7 @@ weekly_data <- flights %>%
             .name = "date") %>%
     count()
 weekly_data %>%
-  ggplot(aes(x = date, y = n)) + 
+  ggplot(aes(x = interval_start(date), y = n)) + 
   geom_bar(stat = "identity", fill = "#0072B2") + 
   scale_x_date(breaks = date_breaks, labels = scales::label_date_short())
 ```

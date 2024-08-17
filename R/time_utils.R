@@ -853,7 +853,7 @@ time_aggregate_left <- function(x, time_by, g = NULL,
                                 time_type = getOption("timeplyr.time_type", "auto"),
                                 roll_month = getOption("timeplyr.roll_month", "preday"),
                                 roll_dst = getOption("timeplyr.roll_dst", "NA"),
-                                as_interval = getOption("timeplyr.use_intervals", FALSE)){
+                                as_interval = getOption("timeplyr.use_intervals", TRUE)){
   time_by <- time_by_list(time_by)
   num <- time_by_num(time_by)
   units <- time_by_unit(time_by)
@@ -1354,7 +1354,7 @@ divide_interval_by_period2 <- function(start, end, per){
   estimate <- (time_as_number(as_datetime2(end)) -
                  time_as_number(as_datetime2(start)) ) / unit_to_seconds(per)
   max_len <- max(length(start), length(end), length(per))
-  timespans <- recycle(start = start, end = end, length = max_len)
+  timespans <- cheapr::recycle(start = start, end = end, length = max_len)
   # Here we make sure to use rep method for lubridate periods
   timespans[[3]] <- rep_single_unit_period(per, length.out = max_len)
   if (na_count(estimate) == 0) {

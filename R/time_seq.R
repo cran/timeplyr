@@ -60,8 +60,6 @@
 #' `time_seq_v` returns time sequences. \cr
 #' `time_seq_v2` also returns time sequences.
 #'
-#' @seealso [seq_id] [time_seq_id]
-#'
 #' @examples
 #' library(timeplyr)
 #' library(lubridate)
@@ -491,7 +489,7 @@ period_seq_v2 <- function(sizes, from, units, num = 1L,
   # Following timechange rules.
   convert_back_to_date <- is_date(from) &&
     unit %in% c("day", "week", "month", "year")
-  period_df <- recycle(from = from, num = num, sizes = sizes)
+  period_df <- cheapr::recycle(from = from, num = num, sizes = sizes)
   data.table::setDT(period_df)
   period_df[, ("row_id") := seq_len(.N)]
   # We want to eliminate unnecessary grouped calculations

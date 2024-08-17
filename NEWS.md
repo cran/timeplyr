@@ -1,3 +1,22 @@
+# timeplyr 0.8.2
+
+* time_intervals are now used by default. Use the 'timeplyr.use_intervals' option
+to control this behaviour globally.
+
+* New ggplot2 scales for year_months and year_quarters.
+
+* `time_ggplot` can now handle 'year_month' and 'year_quarter' objects.
+
+* New function `time_cut_width` which is the same as `time_aggregate` but with
+less arguments.
+
+* New `roll_lag` and `roll_diff` methods for time-series objects.
+
+* Creating 'year_months' and 'year_quarters' from numeric vectors now always coerces them to integer internally.
+
+* Fixed a small bug in `roll_diff` where the order vector was not being 
+used in the case when a vector of lags is supplied.
+
 # timeplyr 0.8.1
 
 * Fixed a regression where some methods stopped being exported.

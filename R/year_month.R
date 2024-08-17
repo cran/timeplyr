@@ -72,7 +72,7 @@ YM <- function(length = 0L){
 #' @rdname year_month
 #' @export
 year_month_decimal <- function(x){
-  m <- as.integer(( x * 12 ) - (1970 * 12))
+  m <- round(( x * 12 ) - (1970 * 12))
   new_year_month(m)
 }
 #' @rdname year_month
@@ -82,6 +82,7 @@ decimal_year_month <- function(x){
 }
 new_year_month <- function(x){
   check_is_num(x)
+  x <- as.integer(x)
   class(x) <- "year_month"
   x
 }
@@ -121,7 +122,8 @@ new_year_month <- function(x){
 }
 #' @exportS3Method base::c
 `c.year_month` <- function(...){
-  new_year_month(do.call(c, lapply(list(...), unclass)))
+  new_year_month(NextMethod("c"))
+  # new_year_month(do.call(c, lapply(list(...), unclass)))
 }
 #' @exportS3Method base::print
 print.year_month <- function(x, max = NULL, ...){
@@ -196,6 +198,7 @@ as.POSIXlt.year_month <- function(x, tz = "UTC", ...){
 }
 new_year_quarter <- function(x){
   check_is_num(x)
+  x <- as.integer(x)
   class(x) <- "year_quarter"
   x
 }
@@ -207,7 +210,7 @@ YQ <- function(length = 0L){
 #' @rdname year_month
 #' @export
 year_quarter_decimal <- function(x){
-  q <- as.integer(( x * 4 ) - (1970 * 4))
+  q <- round(( x * 4 ) - (1970 * 4))
   new_year_quarter(q)
 }
 #' @rdname year_month
@@ -251,7 +254,8 @@ decimal_year_quarter <- function(x){
 }
 #' @exportS3Method base::c
 `c.year_quarter` <- function(...){
-  new_year_quarter(do.call(c, lapply(list(...), unclass)))
+  new_year_quarter(NextMethod("c"))
+  # new_year_quarter(do.call(c, lapply(list(...), unclass)))
 }
 #' @exportS3Method base::print
 print.year_quarter <- function(x, max = NULL, ...){
@@ -324,30 +328,31 @@ as.POSIXct.year_quarter <- function(x, tz = "UTC", ...){
 as.POSIXlt.year_quarter <- function(x, tz = "UTC", ...){
   as.POSIXlt(as.POSIXct(x, tz = tz))
 }
-#' @exportS3Method base::rep_len
-rep_len.year_month <- function(x, length.out){
-  x[rep_len(seq_along(x), length.out = length.out)]
-}
-#' @exportS3Method base::rep.int
-rep.int.year_month <- function(x, ...){
-  x[rep.int(seq_along(x), ...)]
-}
 #' @exportS3Method base::rep
 rep.year_month <- function(x, ...){
-  x[rep(seq_along(x), ...)]
-}
-#' @exportS3Method base::rep_len
-rep_len.year_quarter <- function(x, length.out){
-  x[rep_len(seq_along(x), length.out = length.out)]
-}
-#' @exportS3Method base::rep.int
-rep.int.year_quarter <- function(x, ...){
-  x[rep.int(seq_along(x), ...)]
+  cl <- oldClass(x)
+  class(x) <- NULL
+  val <- NextMethod("rep")
+  class(val) <- cl
+  val
 }
 #' @exportS3Method base::rep
 rep.year_quarter <- function(x, ...){
-  x[rep(seq_along(x), ...)]
+  cl <- oldClass(x)
+  class(x) <- NULL
+  val <- NextMethod("rep")
+  class(val) <- cl
+  val
 }
+
+is_year_month <- function(x){
+  inherits(x, "year_month")
+}
+
+is_year_quarter <- function(x){
+  inherits(x, "year_quarter")
+}
+
 .months <- c("Jan", "Feb", "Mar",
              "Apr", "May", "Jun",
              "Jul", "Aug", "Sep",
