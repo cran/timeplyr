@@ -8,58 +8,41 @@
 \usage{
 time_gaps(
   x,
-  time_by = NULL,
+  timespan = granularity(x),
   g = NULL,
   use.g.names = TRUE,
-  time_type = getOption("timeplyr.time_type", "auto"),
   check_time_regular = FALSE
 )
 
 time_num_gaps(
   x,
-  time_by = NULL,
+  timespan = granularity(x),
   g = NULL,
   use.g.names = TRUE,
   na.rm = TRUE,
-  time_type = getOption("timeplyr.time_type", "auto"),
   check_time_regular = FALSE
 )
 
 time_has_gaps(
   x,
-  time_by = NULL,
+  timespan = granularity(x),
   g = NULL,
   use.g.names = TRUE,
   na.rm = TRUE,
-  time_type = getOption("timeplyr.time_type", "auto"),
   check_time_regular = FALSE
 )
 }
 \arguments{
-\item{x}{A date, datetime or numeric vector.}
+\item{x}{Time vector. \cr
+E.g. a \code{Date}, \code{POSIXt}, \code{numeric} or any time-based vector.}
 
-\item{time_by}{Time unit. \cr
-Must be one of the three:
-\itemize{
-\item string, specifying either the unit or the number and unit, e.g
-\code{time_by = "days"} or \code{time_by = "2 weeks"}
-\item named list of length one, the unit being the name, and
-the number the value of the list, e.g. \code{list("days" = 7)}.
-For the vectorized time functions, you can supply multiple values,
-e.g. \code{list("days" = 1:10)}.
-\item Numeric vector. If time_by is a numeric vector and x is not a date/datetime,
-then arithmetic is used, e.g \code{time_by = 1}.
-}}
+\item{timespan}{\link{timespan}.}
 
 \item{g}{Grouping object passed directly to \code{collapse::GRP()}.
 This can for example be a vector or data frame.}
 
 \item{use.g.names}{Should the result include group names?
 Default is \code{TRUE}.}
-
-\item{time_type}{Time type, either "auto", "duration" or "period".
-With larger data, it is recommended to use \code{time_type = "duration"} for
-speed and efficiency.}
 
 \item{check_time_regular}{Should the time vector be
 checked to see if it is regular (with or without gaps)?
@@ -83,28 +66,20 @@ values are in increasing order and are whole numbers.
 For more strict checks, see \code{?time_is_regular}.
 }
 \examples{
+
 library(timeplyr)
-library(dplyr)
+library(fastplyr)
 library(lubridate)
 library(nycflights13)
-\dontshow{
-.n_dt_threads <- data.table::getDTthreads()
-.n_collapse_threads <- collapse::get_collapse()$nthreads
-data.table::setDTthreads(threads = 2L)
-collapse::set_collapse(nthreads = 1L)
-}
 missing_dates(flights$time_hour)
 time_has_gaps(flights$time_hour)
 time_num_gaps(flights$time_hour)
-time_gaps(flights$time_hour)
+length(time_gaps(flights$time_hour))
 time_num_gaps(flights$time_hour, g = flights$origin)
 
 # Number of missing hours by origin and dest
 flights \%>\%
-  group_by(origin, dest) \%>\%
-  summarise(n_missing = time_num_gaps(time_hour, "hours"))
-\dontshow{
-data.table::setDTthreads(threads = .n_dt_threads)
-collapse::set_collapse(nthreads = .n_collapse_threads)
-}
+  f_group_by(origin, dest) \%>\%
+  f_summarise(n_missing = time_num_gaps(time_hour, "hours"))
+
 }

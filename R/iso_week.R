@@ -49,15 +49,13 @@ iso_week <- function(x, year = TRUE, day = FALSE){
   } else {
     out <- sprintf("W%02d", w)
   }
-  out[cheapr::which_na(w)] <- NA_character_
+  out[which_na(w)] <- NA_character_
   out
 }
 #' @rdname iso_week
 #' @export
 isoday <- function(x){
-  out <- data.table::wday(x) - 1L
-  out[which_val(out, 0L)] <- 7L
-  out
+  cheapr::val_replace(data.table::wday(x) - 1L, 0L, 7L)
 }
 # Integer isoweek
 # isoweek <- function(x){
@@ -66,7 +64,7 @@ isoday <- function(x){
 #   m <- x$mon + 1L
 #   d <- x$mday
 #   wday <- x$wday
-#   wday[which_(wday == 0L)] <- 7L
+#   wday[which(wday == 0L)] <- 7L
 #   date <- as_int_date(lubridate::make_date(y, m, d))
 #   date <- date + (4L - wday)
 #   jan1 <- as.integer(lubridate::make_date(as.POSIXlt(date)$year + 1900L, 1L, 1L))

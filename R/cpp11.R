@@ -24,64 +24,12 @@ cpp_roll_growth_rate <- function(x, lag, log) {
   .Call(`_timeplyr_cpp_roll_growth_rate`, x, lag, log)
 }
 
-cpp_row_id <- function(order, group_sizes, ascending) {
-  .Call(`_timeplyr_cpp_row_id`, order, group_sizes, ascending)
-}
-
 cpp_vector_size <- function(x) {
   .Call(`_timeplyr_cpp_vector_size`, x)
 }
 
-cpp_list_which_not_null <- function(l) {
-  .Call(`_timeplyr_cpp_list_which_not_null`, l)
-}
-
-list_has_interval <- function(l) {
-  .Call(`_timeplyr_list_has_interval`, l)
-}
-
-list_item_is_interval <- function(l) {
-  .Call(`_timeplyr_list_item_is_interval`, l)
-}
-
-cpp_sorted_group_starts <- function(group_sizes, init_loc) {
-  .Call(`_timeplyr_cpp_sorted_group_starts`, group_sizes, init_loc)
-}
-
 roll_time_threshold <- function(x, threshold, switch_on_boundary) {
   .Call(`_timeplyr_roll_time_threshold`, x, threshold, switch_on_boundary)
-}
-
-cpp_df_group_indices <- function(rows, size) {
-  .Call(`_timeplyr_cpp_df_group_indices`, rows, size)
-}
-
-cpp_r_obj_address <- function(x) {
-  .Call(`_timeplyr_cpp_r_obj_address`, x)
-}
-
-cpp_bin <- function(x, breaks, codes, right, include_lowest, include_oob) {
-  .Call(`_timeplyr_cpp_bin`, x, breaks, codes, right, include_lowest, include_oob)
-}
-
-cpp_bin_grouped <- function(x, y, codes, right, include_lowest, include_oob) {
-  .Call(`_timeplyr_cpp_bin_grouped`, x, y, codes, right, include_lowest, include_oob)
-}
-
-cpp_list_subset <- function(x, ptype, i, default_value) {
-  .Call(`_timeplyr_cpp_list_subset`, x, ptype, i, default_value)
-}
-
-cpp_nrows <- function(x) {
-  .Call(`_timeplyr_cpp_nrows`, x)
-}
-
-cpp_address_equal <- function(x, y) {
-  .Call(`_timeplyr_cpp_address_equal`, x, y)
-}
-
-cpp_copy <- function(x) {
-  .Call(`_timeplyr_cpp_copy`, x)
 }
 
 cpp_consecutive_na_id <- function(x, left_to_right) {
@@ -92,6 +40,6 @@ cpp_which_first_gap <- function(x, increment, left_to_right) {
   .Call(`_timeplyr_cpp_which_first_gap`, x, increment, left_to_right)
 }
 
-cpp_group_locs <- function(order, group_sizes) {
-  .Call(`_timeplyr_cpp_group_locs`, order, group_sizes)
+set_vec_elt <- function(x, i, value) {
+  .Call(`_timeplyr_set_vec_elt`, x, i, value)
 }

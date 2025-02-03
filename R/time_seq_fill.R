@@ -1,18 +1,26 @@
-time_seq_fill <- function(x, time_by = NULL,
-                          time_type = getOption("timeplyr.time_type", "auto"),
-                          roll_month = getOption("timeplyr.roll_month", "preday"),
-                          roll_dst = getOption("timeplyr.roll_dst", "NA")){
+seq_direction <- function(x){
+  first <- collapse::ffirst(x, na.rm = TRUE)
+  last <- collapse::flast(x, na.rm = TRUE)
+  sign(last - first)
+}
+
+time_seq_fill <- function(x){
   check_is_time_or_num(x)
+  if (length(x) == 0){
+    return(x)
+  }
   if (cheapr::all_na(x)){
     warning("all values of x are NA, cannot fill the explicit missing values")
     return(x)
   }
-  time_by <- time_by_get(x, time_by)
-  check_time_by_length_is_one(time_by)
+  desc <- seq_direction(x) < 1
+  timespan <- granularity(x)
+  if (desc){
+    timespan <- -timespan
+  }
   # If the sequence starts/ends with NA, we need to work with everything but these
   # first/last NA values
-  # if (num_na == length(x)){
-  which_na <- cheapr::which_na(x)
+  which_na <- which_na(x)
   num_na <- length(which_na)
   if (num_na > 0 && which_na[1] == 1){
     which_last_missing_value_from_left <- cpp_which_first_gap(which_na, 1L, TRUE)
@@ -44,57 +52,39 @@ time_seq_fill <- function(x, time_by = NULL,
   if (n_first_nas == 0){
     start <- vec_head(x)
   } else {
-    time_add <- add_names(
-      list(
-        -(time_by_num(time_by) * n_first_nas)
-      ),
-      time_by_unit(time_by)
-    )
-    start <- time_add2(x[n_first_nas + 1L], time_add,
-                       time_type = time_type,
-                       roll_month = roll_month,
-                       roll_dst = roll_dst)
+    time_to_subtract <- timespan * n_first_nas
+    start <- time_subtract(x[n_first_nas + 1L], time_to_subtract)
   }
   if (n_last_nas == 0){
     end <- vec_tail(x)
   } else {
-    time_add <- add_names(
-      list(
-        (time_by_num(time_by) * n_last_nas)
-      ),
-      time_by_unit(time_by)
-    )
-    end <- time_add2(x[length(x) - n_last_nas], time_add,
-                     time_type = time_type,
-                     roll_month = roll_month,
-                     roll_dst = roll_dst)
+    time_to_add <- time_to_subtract <- timespan * n_last_nas
+    end <- time_add(x[length(x) - n_last_nas], time_to_add)
   }
-  elapsed <- time_elapsed(x, rolling = TRUE,
-                          time_by = time_by,
-                          time_type = time_type,
-                          na_skip = TRUE)
-  seq_diff <- elapsed
+  elapsed <- time_elapsed(x, timespan, rolling = TRUE, na_skip = TRUE)
   if (num_na > 0){
     na_count <- cpp_consecutive_na_id(x, TRUE)
 
     # Lag na_count without taking a copy
-    na_count <- cheapr::lag_(na_count, fill = 0L, set = TRUE)
+    na_count <- cheapr::lag_(na_count, 1, fill = 0L, set = TRUE)
 
     # Adjust elapsed time between non-NA values
     # by the amount of NA values between them
     # e.g. if there are 2 NA values between a pair of values then
     # We subtract 2 from the elapsed time between this pair
-    seq_diff <- seq_diff - na_count
+    elapsed <- elapsed - na_count
   }
-  is_regular <- all(abs(seq_diff - 1L) < sqrt(.Machine$double.eps), na.rm = TRUE)
+  if (is.integer(elapsed)){
+    is_regular <- cheapr::val_count(elapsed, 1L) == (length(elapsed) - num_na - 1L)
+  } else {
+    is_regular <- cppdoubles::all_equal(elapsed, 1, na.rm = TRUE)
+  }
+
   if (!is_regular){
     stop("x must be a regular sequence with no duplicates or implicit gaps in time.")
   }
   if (num_na > 0){
-    time_seq_v(start, end, time_by = time_by,
-               time_type = time_type,
-               roll_month = roll_month,
-               roll_dst = roll_dst)
+    time_seq_v(start, end, timespan)
   } else {
     x
   }

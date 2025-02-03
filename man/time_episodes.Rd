@@ -14,7 +14,6 @@ time_episodes(
   fill = 0,
   .add = FALSE,
   event = NULL,
-  time_type = getOption("timeplyr.time_type", "auto"),
   .by = NULL
 )
 }
@@ -83,10 +82,6 @@ but this need not be the case. \cr
 list element represent the event. For example, if your events were coded as
 \code{0} and \code{1} in a variable named "evt" where \code{1} represents the event,
 you would supply \code{event = list(evt = 1)}.}
-
-\item{time_type}{Time type, either "auto", "duration" or "period".
-With larger data, it is recommended to use \code{time_type = "duration"} for
-speed and efficiency.}
 
 \item{.by}{(Optional). A selection of columns to group by for this operation.
 Columns are specified using \code{tidyselect}.}
@@ -162,36 +157,20 @@ collapse::set_collapse(nthreads = 1L)
 events <- flights \%>\%
   mutate(date = as_date(time_hour)) \%>\%
   group_by(origin, dest) \%>\%
-  time_episodes(date, time_by = "week", window = 1)
-
-# The pooled average time between flights of a specific origin and destination
-# is ~ 5.2 hours
-# This average is a weighted average of average time between events
-# Weighted by the frequency of origin-destination groups (pairs)
-
-# It can be calculated like so:
-# flights \%>\%
-#   arrange(origin, dest, time_hour) \%>\%
-#   group_by(origin, dest) \%>\%
-#   mutate(time_diff = time_diff(lag(time_hour), time_hour, "hours")) \%>\%
-#   summarise(n = n(),
-#             mean = mean(time_diff, na.rm = TRUE)) \%>\%
-#   ungroup() \%>\%
-#   summarise(pooled_mean = weighted.mean(mean, n, na.rm = TRUE))
+  time_episodes(date, "week", window = 1)
 
 events
 
 episodes <- events \%>\%
   filter(ep_id_new > 1)
-nrow(fdistinct(episodes, origin, dest)) # 55 origin-destinations
+nrow(fastplyr::f_distinct(episodes, origin, dest)) # 55 origin-destinations
 
 # As expected summer months saw the least number of
 # dry-periods
 episodes \%>\%
   ungroup() \%>\%
-  time_by(ep_start, time_by = "week",
-          .name = "ep_start", as_interval = FALSE) \%>\%
-  count() \%>\%
+  time_by(ep_start, "week", .name = "ep_start") \%>\%
+  count(ep_start = interval_start(ep_start)) \%>\%
   ggplot(aes(x = ep_start, y = n)) +
   geom_bar(stat = "identity")
 \dontshow{

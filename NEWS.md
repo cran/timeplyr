@@ -1,3 +1,81 @@
+# timeplyr 1.0.0
+
+### Major breaking changes
+
+- Time intervals in timeplyr have been re-imagined.
+They are now fixed-width intervals which means any one time interval vector
+will have a common width for all intervals it contains, e.g. 1 month.
+This makes internal operations much faster and simplifies the logic
+for working with these objects. The data structure for these intervals
+is a vector of LHS start times with an attribute to specify the
+timespan or width of the interval. All intervals remain LHS closed and
+RHS open. As a side-note this new data structure makes it possible for 
+time intervals to be used in `data.table`.
+
+- Most functions which are not time related have been removed.
+
+- Many arguments have been renamed or removed. 
+  - This includes the `time_type`
+  argument which is no longer used. When specifying units such as 
+  days, weeks, months or years, exact timespans will be used. 
+  - Most functions no longer use the args `roll_dst` and `roll_month` with the 
+  exception of the sequence functions.
+  - The `time_by` argument has been renamed to either `width` or `timespan`
+  depending on the context.
+  
+- Functions `time_expandv`, `time_completev`, `time_span_size` have been 
+renamed to `time_grid`, `time_complete_missing`, `time_grid_size` respectively.
+
+- Functions `time_summarisev` and `time_aggregate` have been removed, use 
+`time_cut_width` instead.
+
+- `time_cut` has been deprecated and renamed to `time_cut_n`.
+
+- `edf`, `asc` and `desc` have been removed as they do not fit the 
+purpose of the package.
+
+- `.roll_na_fill` has been removed.
+  
+### New features
+
+- A custom timeplyr object `timespan` to create and use 
+timespans for various operations.
+
+- New functions `resolution` and `granularity` to calculate 
+the resolution and granularity of a time vector respectively.
+See the help page `?resolution` for more details.
+
+# timeplyr 0.9.0
+
+### Upcoming breaking changes
+
+* All of the tidy functions like `fslice` that are not time-related will be
+removed in the next release. These can now be found in fastplyr.
+
+* It is likely that in the near future, objects of class 'time_interval' will
+be re-imagined to be more efficient fixed-width intervals with a different 
+data structure. Currently the data structure is a length-two list containing 
+start and end times. Most intervals in timeplyr are fixed-width intervals, 
+such as for example a vector of intervals that span a week or a month. 
+A more efficient data structure for this might be to floor the object to the
+start of its respective interval and to simply 
+add an attribute that details the width of the interval.
+
+* The `to` argument that allows for aggregating date and date-time variables
+to a specified time is currently inclusive and will be changed 
+to be non-inclusive in the near-future. This is because 
+intervals in timeplyr are left-closed right-open intervals and so the `to` 
+argument should reflect this.
+
+### Breaking changes
+
+* Many functions that were not time-related have now been deprecated, most
+having been migrated over to the 'fastplyr' package.
+
+### Bug fixes
+
+* A C bug that in rare cases would cause R to crash has been fixed.
+
 # timeplyr 0.8.2
 
 * time_intervals are now used by default. Use the 'timeplyr.use_intervals' option

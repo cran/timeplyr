@@ -182,17 +182,17 @@ roll_growth_rate <- function(x, window = Inf, g = NULL,
     lag_window <- cpp_roll_count_na(x, window, invert = TRUE, partial = partial) - 1L
     if (log){
       gr <- exp(( log(x) - log(x_lagged) ) / lag_window)
-      gr[which_val(lag_window, 0L)] <- 1
+      gr[cheapr::val_find(lag_window, 0L)] <- 1
     } else {
       gr <- ( (x / x_lagged) ^ (1 / lag_window) )
-      gr[which_(x == 0 & x_lagged == 0)] <- 1
+      gr[which(x == 0 & x_lagged == 0)] <- 1
     }
   } else {
     gr <- cpp_roll_growth_rate(x, lag_window, log)
   }
   if (!is.null(inf_fill)){
     # Any growth change from 0 is replaced with inf_fill
-    gr[which_(is.infinite(gr))] <- inf_fill
+    gr[which(is.infinite(gr))] <- inf_fill
   }
   if (!fpluck(sorted_info, "sorted")){
     gr <- greorder2(gr, g = sorted_info[["GRP"]])

@@ -10,10 +10,10 @@ missing_dates(x)
 n_missing_dates(x)
 }
 \arguments{
-\item{x}{A date or datetime vector, or a data frame.}
+\item{x}{A Date or Date-Time vector.}
 }
 \value{
-A date vector if x is a vector, or a list if x is a \code{data.frame}.
+A \code{Date} vector.
 }
 \description{
 Check for missing dates between first and last date

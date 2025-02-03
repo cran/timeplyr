@@ -2,11 +2,11 @@
 
     Code
       df %>% time_episodes(time, time_by = 1, window = 3, .add = FALSE,
-        switch_on_boundary = TRUE) %>% farrange(time)
+        switch_on_boundary = TRUE) %>% fastplyr::f_arrange(time)
     Output
       # A tibble:        15 x 5
       # Episodes:        N: 5, Median: 5, Mean: 5 ▁▁▁▇▁▁▁
-      # Time b/w events: Pooled mean: ~1.86 numeric units
+      # Time b/w events: Mean: ~1.86 numeric units
       # Threshold:       3 numeric units
          time       t_elapsed ep_start   ep_id ep_id_new
          <date>         <dbl> <date>     <int>     <int>
@@ -30,11 +30,11 @@
 
     Code
       df %>% time_episodes(time, time_by = 1, window = 3, .add = TRUE,
-        switch_on_boundary = FALSE) %>% farrange(time)
+        switch_on_boundary = FALSE) %>% fastplyr::f_arrange(time)
     Output
       # A tibble:        15 x 6
       # Episodes:        N: 3, Median: 3, Mean: 3 ▁▁▁▇▁▁▁
-      # Time b/w events: Pooled mean: ~1.86 numeric units
+      # Time b/w events: Mean: ~1.86 numeric units
       # Threshold:       3 numeric units
          time       event t_elapsed ep_start   ep_id ep_id_new
          <date>     <chr>     <dbl> <date>     <int>     <int>
@@ -58,11 +58,12 @@
 
     Code
       df %>% time_episodes(time, time_by = 1, window = 3, .add = TRUE,
-        switch_on_boundary = TRUE, event = list(event = "e")) %>% farrange(time)
+        switch_on_boundary = TRUE, event = list(event = "e")) %>% fastplyr::f_arrange(
+        time)
     Output
       # A tibble:        15 x 6
       # Episodes:        N: 4, Median: 4, Mean: 4 ▁▁▁▇▁▁▁
-      # Time b/w events: Pooled mean: 3 numeric units
+      # Time b/w events: Mean: 3 numeric units
       # Threshold:       3 numeric units
          time       event t_elapsed ep_start   ep_id ep_id_new
          <date>     <chr>     <dbl> <date>     <int>     <int>
@@ -86,11 +87,12 @@
 
     Code
       df %>% time_episodes(time, time_by = 3, window = 1, .add = FALSE,
-        switch_on_boundary = FALSE, event = list(event = "e")) %>% farrange(time)
+        switch_on_boundary = FALSE, event = list(event = "e")) %>% fastplyr::f_arrange(
+        time)
     Output
       # A tibble:        15 x 6
       # Episodes:        N: 3, Median: 3, Mean: 3 ▁▁▁▇▁▁▁
-      # Time b/w events: Pooled mean: 3 numeric units
+      # Time b/w events: Mean: 3 numeric units
       # Threshold:       3 numeric units
          time       event t_elapsed ep_start   ep_id ep_id_new
          <date>     <chr>     <dbl> <date>     <int>     <int>
@@ -114,11 +116,11 @@
 
     Code
       df %>% time_episodes(time, time_by = "days", window = 5, .add = FALSE,
-        roll_episode = FALSE, switch_on_boundary = TRUE) %>% farrange(time)
+        roll_episode = FALSE, switch_on_boundary = TRUE) %>% fastplyr::f_arrange(time)
     Output
       # A tibble:        15 x 5
       # Episodes:        N: 6, Median: 6, Mean: 6 ▁▁▁▇▁▁▁
-      # Time b/w events: Pooled mean: ~1.92 weeks
+      # Time b/w events: Mean: ~1.92 weeks
       # Threshold:       5 days
          time       t_elapsed ep_start   ep_id ep_id_new
          <date>         <int> <date>     <int>     <int>
@@ -142,11 +144,12 @@
 
     Code
       df %>% time_episodes(time, time_by = "5 days", window = 1, .add = FALSE,
-        roll_episode = FALSE, switch_on_boundary = FALSE) %>% farrange(time)
+        roll_episode = FALSE, switch_on_boundary = FALSE) %>% fastplyr::f_arrange(
+        time)
     Output
       # A tibble:        15 x 5
       # Episodes:        N: 4, Median: 4, Mean: 4 ▁▁▁▇▁▁▁
-      # Time b/w events: Pooled mean: ~1.92 weeks
+      # Time b/w events: Mean: ~1.92 weeks
       # Threshold:       5 days
          time       t_elapsed ep_start   ep_id ep_id_new
          <date>         <dbl> <date>     <int>     <int>

@@ -13,18 +13,7 @@
 #' @param data A data frame.
 #' @param origin Origin date variable.
 #' @param end End date variable.
-#' @param time_by Must be one of the three:
-#' * string, specifying either the unit or the number and unit, e.g
-#' `time_by = "days"` or `time_by = "2 weeks"`
-#' * named list of length one, the unit being the name, and
-#' the number the value of the list, e.g. `list("days" = 7)`.
-#' For the vectorized time functions, you can supply multiple values,
-#' e.g. `list("days" = 1:10)`.
-#' * Numeric vector. If time_by is a numeric vector and x is not a date/datetime,
-#' then arithmetic is used, e.g `time_by = 1`.
-#' @param time_type If "auto", `periods` are used for
-#' the time expansion when days, weeks, months or years are specified,
-#' and `durations` are used otherwise.
+#' @param timespan [timespan].
 #' @param min_delay The minimum acceptable delay,
 #' all delays less than this are removed before calculation.
 #' Default is `min_delay = -Inf`.
@@ -68,7 +57,7 @@
 #' inc_distr_days <- ebola_linelist %>%
 #'   get_time_delay(date_of_infection,
 #'                  date_of_onset,
-#'                  time_by = "days")
+#'                  time = "days")
 #' head(inc_distr_days$data)
 #' inc_distr_days$unit
 #' inc_distr_days$num
@@ -80,7 +69,7 @@
 #' inc_distr_days <- ebola_linelist %>%
 #'   get_time_delay(date_of_infection,
 #'                  date_of_onset,
-#'                  time_by = "day",
+#'                  time = "day",
 #'                  bw = "nrd")
 #' inc_distr_days$plot
 #'
@@ -88,7 +77,7 @@
 #' inc_distr_weeks <- ebola_linelist %>%
 #'   get_time_delay(date_of_infection,
 #'                  date_of_onset,
-#'                  time_by = "weeks",
+#'                  time = "weeks",
 #'                  bw = "nrd")
 #' inc_distr_weeks$plot
 #' \dontshow{
@@ -96,8 +85,7 @@
 #' collapse::set_collapse(nthreads = .n_collapse_threads)
 #'}
 #' @export
-get_time_delay <- function(data, origin, end, time_by = 1L,
-                           time_type = getOption("timeplyr.time_type", "auto"),
+get_time_delay <- function(data, origin, end, timespan = 1L,
                            min_delay = -Inf, max_delay = Inf,
                            probs = c(0.25, 0.5, 0.75, 0.95),
                            .by = NULL,
@@ -119,39 +107,39 @@ get_time_delay <- function(data, origin, end, time_by = 1L,
   check_length(end, 1)
   start_time <- origin
   end_time <- end
-  origin_df <- safe_ungroup(origin_info[["data"]])
-  end_df <- fselect(safe_ungroup(end_info[["data"]]), .cols = end)
-  out <- df_as_dt(df_cbind(origin_df, end_df))
-  grp_nm <- new_var_nm(out, ".group.id")
-  set_add_cols(out, add_names(list(group_id(data, .by = {{ .by }})), grp_nm))
-  set_rm_cols(out, setdiff(names(out),
-                           c(grp_nm, group_vars, start_time, end_time)))
-  grp_df <- fdistinct(fselect(out, .cols = c(grp_nm, group_vars)),
-                      .cols = grp_nm,
-                      .keep_all = TRUE)
-  time_by <- time_by_list(time_by)
-  by_unit <- time_by_unit(time_by)
-  by_n <- time_by_num(time_by)
-  delay_nm <- new_var_nm(out, "delay")
-  set_add_cols(out, add_names(
+  origin_df <- df_ungroup(origin_info[["data"]])
+  end_df <- fastplyr::f_select(df_ungroup(end_info[["data"]]), .cols = end)
+  out <- fastplyr::f_bind_cols(origin_df, end_df)
+  grp_nm <- unique_col_name(out, ".group.id")
+  out <- df_add_cols(out, add_names(list(
+    fastplyr::add_group_id(data, .by = {{ .by }}, .name = grp_nm)[[grp_nm]]
+    ), grp_nm))
+  out <- df_rm_cols(out, setdiff(names(out), c(grp_nm, group_vars, start_time, end_time)))
+  grp_df <- fastplyr::f_distinct(
+    fastplyr::f_select(out, .cols = c(grp_nm, group_vars)),
+    .cols = grp_nm,
+    .keep_all = TRUE
+  )
+  timespan <- timespan(timespan)
+  by_unit <- timespan_unit(timespan)
+  by_n <- timespan_num(timespan)
+  delay_nm <- unique_col_name(out, "delay")
+  out <- df_add_cols(out, add_names(
     list(
       time_diff(out[[start_time]],
-                out[[end_time]],
-                time_by = time_by,
-                time_type = time_type)
+                out[[end_time]], timespan)
     ),
     delay_nm
   ))
-  n_miss_delays <- na_count(out[[delay_nm]])
+  n_miss_delays <- cheapr::na_count(out[[delay_nm]])
   if (n_miss_delays > 0){
-    warning(paste(n_miss_delays, "missing observations will be
+    cli::cli_warn(paste(n_miss_delays, "missing observations will be
                   removed before calculation.",
                   sep = " "))
   }
   # Remove outliers
-  out <- cheapr::sset(out,
-                      data.table::between(out[[delay_nm]], min_delay, max_delay,
-                                          incbounds = TRUE, NAbounds = NA))
+  out <- sset(out, data.table::between(out[[delay_nm]], min_delay, max_delay,
+                                       incbounds = TRUE, NAbounds = NA))
   # Quantile summary
   iqr_p_missed <- setdiff(c(0.25, 0.75), probs)
   if (length(iqr_p_missed) > 0L){
@@ -159,76 +147,92 @@ get_time_delay <- function(data, origin, end, time_by = 1L,
       probs <- c(probs, iqr_p)
     }
   }
-  q_prcnts <- round(probs * 100)
-  q_nms <- paste0(rep_len("p", length(probs)), q_prcnts)
-  # Descriptive statistical summary
-  delay_summary <- stat_summarise(out, .cols = delay_nm,
-                                  .by = all_of(grp_nm),
-                                  stat = c("n", "min", "max",
-                                           "mean", "sd"),
-                                  sort = FALSE,
-                                  q_probs = probs,
-                                  inform_stats = FALSE)
-  delay_summary[, ("se") := get("sd")/sqrt(get("n"))]
-  delay_summary[, ("iqr") := get("p75") - get("p25")]
+  sd <- stats::sd
+  summary_stats_df <- fastplyr::f_summarise(
+    out,
+    n = dplyr::n(),
+    dplyr::across(
+      dplyr::all_of(delay_nm),
+      list(min, max, mean, sd)
+    ),
+    .order = FALSE,
+    .by = dplyr::all_of(grp_nm)
+  )
+
+  quantiles_df <- fastplyr::tidy_quantiles(
+    out, .cols = delay_nm,
+    .order = FALSE,
+    .by = dplyr::all_of(grp_nm),
+    pivot = "wide",
+    probs = c(0.05, 0.25, 0.5, 0.75, 0.95)
+  )
+
+  summary_stats_df <- fastplyr::f_bind_cols(
+    summary_stats_df,
+    dplyr::select(quantiles_df, -dplyr::all_of(grp_nm))
+  )
+
+  summary_stats_df[["iqr"]] <- summary_stats_df[["p75"]] - summary_stats_df[["p25"]]
+  summary_stats_df[["se"]] <- summary_stats_df[["sd"]] / sqrt(summary_stats_df[["n"]])
+
   if (length(group_vars) > 0L){
-    # Left-join
-    delay_summary[grp_df, (group_vars) := mget(group_vars),
-                  on = grp_nm, allow.cartesian = FALSE]
+    summary_stats_df <- fastplyr::f_left_join(
+      grp_df, summary_stats_df, by = grp_nm
+    )
+
   }
-  setorderv2(delay_summary, cols = grp_nm)
-  set_rm_cols(delay_summary, c(grp_nm, iqr_p_missed))
-  delay_summary <- fselect(delay_summary, .cols = c(group_vars, "n", "min",
-                                                    "max", "mean", "sd",
-                                                    q_nms, "iqr", "se"))
+  summary_stats_df <- fastplyr::f_arrange(summary_stats_df, .cols = grp_nm)
+  summary_stats_df <- df_rm_cols(summary_stats_df, c(grp_nm, iqr_p_missed))
   # Create delay table
   min_delay <- max(min(out[[delay_nm]]), min_delay)
   min_delay <- min_delay[!is.infinite(min_delay)]
   max_delay <- min(max(out[[delay_nm]]), max_delay)
   max_delay <- max_delay[!is.infinite(max_delay)]
   if (length(min_delay) == 0 || length(max_delay) == 0){
-    delay_tbl <- new_tbl(delay = numeric(),
-                         n = integer(),
-                         cumulative = integer(),
-                         edf = numeric())
+    delay_tbl <- fastplyr::new_tbl(
+      delay = numeric(),
+      n = integer(),
+      cumulative = integer(),
+      edf = numeric()
+    )
   } else {
     delay_tbl <- out %>%
-      fcount(across(all_of(c(grp_nm, group_vars))),
+      fastplyr::f_count(across(all_of(c(grp_nm, group_vars))),
              across(all_of(delay_nm), ceiling),
              name = "n")
-    delay_tbl[, ("cumulative") := collapse::fcumsum(get("n"),
-                                                    g = get(grp_nm),
-                                                    na.rm = TRUE)]
-    # delay_tbl[, ("edf") :=
-    #             get("cumulative") / sum(get("n")), by = grp_nm]
-    delay_tbl[, ("edf") :=
-                get("cumulative") / gsum(get("n"),
-                                         g = get(grp_nm),
-                                         na.rm = FALSE,
-                                         fill = TRUE)]
-    # delay_tbl[, ("edf") := edf(get(delay_nm),
-    #                            g = get(grp_nm),
-    #                            wt = get("n"))]
-    set_rm_cols(delay_tbl, setdiff(names(delay_tbl),
+
+    delay_tbl[["cumulative"]] <- collapse::fcumsum(
+      delay_tbl[["n"]],
+      g = delay_tbl[[grp_nm]],
+      na.rm = TRUE
+    )
+    delay_tbl[["edf"]] <- delay_tbl[["cumulative"]] /
+      gsum(
+        delay_tbl[["n"]],
+        g = delay_tbl[[grp_nm]],
+        na.rm = FALSE,
+        fill = TRUE
+      )
+    delay_tbl <- df_rm_cols(delay_tbl, setdiff(names(delay_tbl),
                                    c(group_vars, delay_nm,
                                      "n", "cumulative", "edf")))
   }
-  set_rm_cols(out, grp_nm)
-  out <- fselect(out, .cols = c(group_vars, setdiff(names(out), group_vars)))
-  out <- df_reconstruct(out, data)
-  delay_summary <- df_reconstruct(delay_summary, data)
-  delay_tbl <- df_reconstruct(delay_tbl, data)
+  out <- df_rm_cols(out, grp_nm)
+  out <- fastplyr::f_select(out, .cols = c(group_vars, setdiff(names(out), group_vars)))
+  out <- reconstruct(data, out)
+  delay_summary <- reconstruct(data, summary_stats_df)
+  delay_tbl <- reconstruct(data, delay_tbl)
   # Delay values
   delay_list <- list("data" = out,
                      "units" = by_unit,
                      "num" = by_n,
-                     "summary" = delay_summary,
+                     "summary" = summary_stats_df,
                      "delay" = delay_tbl)
   if (include_plot){
     x_scales <- match.arg(x_scales, c("fixed", "free_x"))
     # Control x-axis plot text
     if (by_n != 1){
-      if (by_unit == "numeric"){
+      if (!timespan_has_unit(timespan)){
         plot_unit_text <- paste0("/", by_n)
       }
       else {
@@ -236,7 +240,7 @@ get_time_delay <- function(data, origin, end, time_by = 1L,
       }
     }
     else {
-      if (by_unit == "numeric"){
+      if (!timespan_has_unit(timespan)){
         plot_unit_text <- ""
       }
       else {

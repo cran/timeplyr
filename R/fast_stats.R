@@ -5,7 +5,7 @@ fn <- function(x, g = NULL, sort = TRUE,
     if (x_missing){
       stop("when g = NULL, x must be supplied")
     }
-    nobs <- vec_length(x)
+    nobs <- cheapr::vector_length(x)
     if (expand){
       nobs <- rep_len(nobs, nobs)
     }
@@ -22,7 +22,7 @@ fn <- function(x, g = NULL, sort = TRUE,
       nobs <- nobs[GRP_group_id(g)]
     }
     if (!x_missing){
-      N <- vec_length(x)
+      N <- cheapr::vector_length(x)
       if (N != GRP_data_size(g)){
         stop("g must be the same size as the data")
       }
@@ -35,7 +35,7 @@ fnmiss <- function(x, g = NULL, sort = TRUE, use.g.names = TRUE,
   if (is.null(x)){
     return(0L)
   }
-  x <- safe_ungroup(x)
+  x <- df_ungroup(x)
   g <- GRP2(g, sort = sort)
   N <- fn(x, g = g, use.g.names = FALSE)
   nobs <- collapse::fnobs(x, g = g, use.g.names = use.g.names)
