@@ -4,18 +4,15 @@
 \alias{is_whole_number}
 \title{Are all numbers whole numbers?}
 \usage{
-is_whole_number(x, tol = .Machine$double.eps, na.rm = TRUE)
+is_whole_number(x, tol = .Machine$double.eps^(2/3), na.rm = TRUE)
 }
 \arguments{
 \item{x}{A numeric vector.}
 
 \item{tol}{tolerance value. \cr
-The default is \code{.Machine$double.eps}, essentially the lowest possible tolerance.
-A more typical tolerance for double floating point comparisons in other comparisons
-is \code{sqrt(.Machine$double.eps)}.}
+The default is \code{.Machine$double.eps^(2/3)}, an arbitrarily small tolerance.}
 
-\item{na.rm}{Should \code{NA} values be removed before calculation?
-Default is \code{TRUE}.}
+\item{na.rm}{Should \code{NA} values be ignored? Default is \code{TRUE}.}
 }
 \value{
 A logical vector of length 1.
@@ -52,7 +49,7 @@ library(dplyr)
 \dontshow{
 .n_dt_threads <- data.table::getDTthreads()
 .n_collapse_threads <- collapse::get_collapse()$nthreads
-data.table::setDTthreads(threads = 2L)
+data.table::setDTthreads(threads = 1L)
 collapse::set_collapse(nthreads = 1L)
 }
 # Has built-in tolerance

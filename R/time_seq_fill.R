@@ -14,7 +14,7 @@ time_seq_fill <- function(x){
     return(x)
   }
   desc <- seq_direction(x) < 1
-  timespan <- granularity(x)
+  timespan <- granularity(x, exact = TRUE)
   if (desc){
     timespan <- -timespan
   }
@@ -58,30 +58,26 @@ time_seq_fill <- function(x){
   if (n_last_nas == 0){
     end <- vec_tail(x)
   } else {
-    time_to_add <- time_to_subtract <- timespan * n_last_nas
+    time_to_add <- timespan * n_last_nas
     end <- time_add(x[length(x) - n_last_nas], time_to_add)
   }
-  elapsed <- time_elapsed(x, timespan, rolling = TRUE, na_skip = TRUE)
-  if (num_na > 0){
-    na_count <- cpp_consecutive_na_id(x, TRUE)
 
-    # Lag na_count without taking a copy
-    na_count <- cheapr::lag_(na_count, 1, fill = 0L, set = TRUE)
+  # Filter out first and last NA sequence
 
-    # Adjust elapsed time between non-NA values
-    # by the amount of NA values between them
-    # e.g. if there are 2 NA values between a pair of values then
-    # We subtract 2 from the elapsed time between this pair
-    elapsed <- elapsed - na_count
-  }
+  x <- x[(n_first_nas + 1L):(length(x) - n_last_nas)]
+
+  elapsed <- time_elapsed(x,
+    timespan, rolling = FALSE, na_skip = TRUE
+  )
   if (is.integer(elapsed)){
-    is_regular <- cheapr::val_count(elapsed, 1L) == (length(elapsed) - num_na - 1L)
+    target <- seq.int(0L, length(x) - 1L, 1L)
+    is_regular <- all(elapsed == target, na.rm = TRUE)
   } else {
-    is_regular <- cppdoubles::all_equal(elapsed, 1, na.rm = TRUE)
+    is_regular <- cppdoubles::all_equal(elapsed, seq.int(0, length(x) - 1, 1), na.rm = TRUE)
   }
 
   if (!is_regular){
-    stop("x must be a regular sequence with no duplicates or implicit gaps in time.")
+    cli::cli_abort("{.arg x} must be a regular sequence with no duplicates or implicit gaps in time")
   }
   if (num_na > 0){
     time_seq_v(start, end, timespan)

@@ -25,7 +25,7 @@ time_complete(
   from = NULL,
   to = NULL,
   sort = TRUE,
-  fill = NA
+  fill = NULL
 )
 }
 \arguments{
@@ -46,7 +46,8 @@ Columns are specified using tidy-select.}
 
 \item{sort}{Logical. If \code{TRUE} expanded/completed variables are sorted.}
 
-\item{fill}{A named list containing value-name pairs to fill the named implicit missing values.}
+\item{fill}{A named list containing value-name pairs to fill
+the named implicit missing values.}
 }
 \value{
 A \code{data.frame} of expanded time by or across groups.
@@ -67,7 +68,7 @@ library(nycflights13)
 \dontshow{
 .n_dt_threads <- data.table::getDTthreads()
 .n_collapse_threads <- collapse::get_collapse()$nthreads
-data.table::setDTthreads(threads = 2L)
+data.table::setDTthreads(threads = 1L)
 collapse::set_collapse(nthreads = 1L)
 }
 x <- flights$time_hour

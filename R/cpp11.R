@@ -4,8 +4,8 @@ cpp_diff <- function(x, lag, order, run_lengths, fill, differences) {
   .Call(`_timeplyr_cpp_diff`, x, lag, order, run_lengths, fill, differences)
 }
 
-cpp_is_whole_num <- function(x, tol, na_rm) {
-  .Call(`_timeplyr_cpp_is_whole_num`, x, tol, na_rm)
+cpp_is_whole_num <- function(x, tol_, na_rm_) {
+  .Call(`_timeplyr_cpp_is_whole_num`, x, tol_, na_rm_)
 }
 
 cpp_roll_na_fill <- function(x, fill_limit) {
@@ -24,22 +24,14 @@ cpp_roll_growth_rate <- function(x, lag, log) {
   .Call(`_timeplyr_cpp_roll_growth_rate`, x, lag, log)
 }
 
-cpp_vector_size <- function(x) {
-  .Call(`_timeplyr_cpp_vector_size`, x)
-}
-
-roll_time_threshold <- function(x, threshold, switch_on_boundary) {
-  .Call(`_timeplyr_roll_time_threshold`, x, threshold, switch_on_boundary)
-}
-
-cpp_consecutive_na_id <- function(x, left_to_right) {
-  .Call(`_timeplyr_cpp_consecutive_na_id`, x, left_to_right)
+cpp_roll_time_threshold <- function(x, threshold, switch_on_boundary) {
+  .Call(`_timeplyr_cpp_roll_time_threshold`, x, threshold, switch_on_boundary)
 }
 
 cpp_which_first_gap <- function(x, increment, left_to_right) {
   .Call(`_timeplyr_cpp_which_first_gap`, x, increment, left_to_right)
 }
 
-set_vec_elt <- function(x, i, value) {
-  .Call(`_timeplyr_set_vec_elt`, x, i, value)
+cpp_add_months <- function(date, num_months, roll_month) {
+  .Call(`_timeplyr_cpp_add_months`, date, num_months, roll_month)
 }

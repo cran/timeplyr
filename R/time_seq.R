@@ -44,7 +44,7 @@
 #' \dontshow{
 #' .n_dt_threads <- data.table::getDTthreads()
 #' .n_collapse_threads <- collapse::get_collapse()$nthreads
-#' data.table::setDTthreads(threads = 2L)
+#' data.table::setDTthreads(threads = 1L)
 #' collapse::set_collapse(nthreads = 1L)
 #' }
 #' # Dates
@@ -97,80 +97,77 @@
 #' time_seq(leap, to = end, time = "year",
 #'          roll_month = "postday")
 #' time_seq(leap, to = end, time = "year",
-#'          roll_month = getOption("timeplyr.roll_month", "preday"))
+#'          roll_month = getOption("timeplyr.roll_month", "xlast"))
 #' \dontshow{
 #' data.table::setDTthreads(threads = .n_dt_threads)
 #' collapse::set_collapse(nthreads = .n_collapse_threads)
 #' }
 #' @rdname time_seq
 #' @export
-time_seq <- function(from, to, time_by, length.out = NULL,
-                     roll_month = getOption("timeplyr.roll_month", "preday"),
-                     roll_dst = getOption("timeplyr.roll_dst", "NA")){
-  missing_from <- missing(from)
-  missing_to <- missing(to)
-  missing_by <- missing(time_by)
+time_seq <- function(from = NULL, to = NULL, time_by = NULL, length.out = NULL,
+                     roll_month = getOption("timeplyr.roll_month", "xlast"),
+                     roll_dst = getOption("timeplyr.roll_dst", c("NA", "xfirst"))){
+  missing_from <- is.null(from)
+  missing_to <- is.null(to)
+  missing_by <- is.null(time_by)
   missing_len <- is.null(length.out)
-  if (!missing_len && !sign(length.out) >= 0){
-    stop("length.out must be positive")
-  }
-  n_args <- (4 - sum(c(missing_from, missing_to, missing_by, missing_len)))
+  n_args <- (4L - sum(c(missing_from, missing_to, missing_by, missing_len)))
   if (n_args < 3){
-      stop("Please supply 3 from either from, to, length.out and time_by")
+    cli::cli_abort(
+      "Please supply 3 args from either {.arg from}, {.arg to}, {.arg length.out} and
+                     {.arg time_by}"
+    )
   }
   if (n_args == 4){
-    warning("from, to, time_by and length.out have all been specified,
-            the result may be unpredictable.")
+    cli::cli_warn(
+      "{.arg from}, {.arg to}, {.arg time_by} and {.arg length.out} have all been specified,
+            the result may be unpredictable"
+    )
   }
-  if (!missing_from && length(from) > 1L) stop("from must be of length 1")
-  if (!missing_to && length(to) > 1L) stop("to must be of length 1")
-  if (!missing_by && length(time_by) > 1L) stop("time_by must be of length 1")
-  if (!missing_len && length(length.out) > 1L) stop("length.out must be of length 1")
   from_and_to <- !missing_from && !missing_to
   from_and_length <- !missing_from && !missing_len
   to_and_length <- !missing_to && !missing_len
+
   if (from_and_to){
-    if (length(from) == 1L && length(to) == 0L){
-      stop("to must be of length 1")
-    }
     # Make from and to most granular data type between them
     set_time_cast(from, to)
   }
-  # Unit parsing
-  if (!missing_by){
-    unit_info <- timespan(time_by)
-    by_n <- timespan_num(unit_info)
-    by_unit <- timespan_unit(unit_info)
-    tby <- unit_info
-    has_unit <- timespan_has_unit(unit_info)
-  } else {
-    has_unit <- FALSE
+
+  # Recycle
+
+  recycled_args <- cheapr::recycle(
+    from = from, to = to,
+    time_by = scalar_if_else(is.null(time_by), NULL, timespan(time_by)),
+    length.out = length.out
+  )
+  from <- recycled_args[["from"]]
+  to <- recycled_args[["to"]]
+  time_by <- recycled_args[["time_by"]]
+  length.out <- recycled_args[["length.out"]]
+
+  # From, to, length, no time_by
+  if (from_and_to && missing_by && !missing_len){
+    time_by <- time_by_calc(from, to, length = length.out)
   }
-    # From, to, length, no time_by
-    if (from_and_to && missing_by && !missing_len){
-      time_unit <- time_by_calc(from, to, length = length.out)
-      # Calculate time_by info from lubridate class object
-      unit_info <- timespan(time_unit)
-      by_n <- timespan_num(unit_info)
-      by_unit <- timespan_unit(unit_info)
-      tby <- new_timespan(by_unit, by_n)
-      # From, to, time_by, no length
+  if (from_and_to && !missing_by && missing_len){
+    wrong_dir <- (unclass(from) > unclass(to) & time_by > 0) |
+      (unclass(from) < unclass(to) & time_by < 0)
+
+    # Correct the direction when user supplies impossible non-zero increment
+    if (any(wrong_dir, na.rm = TRUE)){
+      switch_locs <- cheapr::which_(wrong_dir)
+      time_by[switch_locs] <- -time_by[switch_locs]
     }
-    if (from_and_to && !missing_by && missing_len){
-      length.out <- time_seq_sizes(from, to, tby)
-    }
-    ### After this we will always have both length and time_by
-    if (missing_from){
-      from <- time_add(
-        to, timespan(by_unit, -(by_n * length.out) + by_n),
-        roll_month = roll_month, roll_dst = roll_dst
-      )
-    }
-    if (!missing_to && length(from) > 0L && length(to) > 0L && to < from){
-      by_n <- -abs(by_n)
-      tby <- timespan(timespan_unit(tby), by_n)
-    }
-  time_seq_v2(length.out, from = from, tby,
+    length.out <- time_seq_sizes(from, to, time_by)
+  }
+  ### After this we will always have both length and time_by
+  if (missing_from){
+    from <- time_add(
+      to, -(time_by * length.out) + time_by,
+      roll_month = roll_month, roll_dst = roll_dst
+    )
+  }
+  time_seq_v2(length.out, from = from, time_by,
               roll_dst = roll_dst,
               roll_month = roll_month)
 }
@@ -183,7 +180,7 @@ time_seq_sizes <- function(from, to, timespan){
   tdiff[which(from == to)] <- 0L
   tdiff_rng <- collapse::frange(tdiff, na.rm = TRUE)
   if (isTRUE(any(tdiff_rng < 0))){
-    stop("At least 1 sequence length is negative, please check the time_by unit increments")
+    cli::cli_abort("At least 1 sequence length is negative, please check the supplied timespan increments")
   }
   if (length(tdiff) == 0 || all(is_integerable(abs(tdiff_rng) + 1), na.rm = TRUE)){
     if (is.integer(tdiff)){
@@ -198,11 +195,11 @@ time_seq_sizes <- function(from, to, timespan){
 #' @rdname time_seq
 #' @export
 time_seq_v <- function(from, to, timespan,
-                       roll_month = getOption("timeplyr.roll_month", "preday"),
-                       roll_dst = getOption("timeplyr.roll_dst", "NA")){
-  timespan <- timespan(timespan)
-  units <- timespan_unit(timespan)
-  num <- timespan_num(timespan)
+                       roll_month = getOption("timeplyr.roll_month", "xlast"),
+                       roll_dst = getOption("timeplyr.roll_dst", c("NA", "xfirst"))){
+  if (length(to) == 0L){
+    return(from[0])
+  }
   set_time_cast(from, to)
   seq_sizes <- time_seq_sizes(from = from, to = to, timespan)
   time_seq_v2(seq_sizes, from = from, timespan,
@@ -214,13 +211,18 @@ time_seq_v <- function(from, to, timespan,
 #' @rdname time_seq
 #' @export
 time_seq_v2 <- function(sizes, from, timespan,
-                        roll_month = getOption("timeplyr.roll_month", "preday"),
-                        roll_dst = getOption("timeplyr.roll_dst", "NA")){
+                        roll_month = getOption("timeplyr.roll_month", "xlast"),
+                        roll_dst = getOption("timeplyr.roll_dst", c("NA", "xfirst"))){
+
+  if (length(from) == 0L || length(sizes) == 0L){
+    return(from[0L])
+  }
+
   timespan <- timespan(timespan)
   units <- timespan_unit(timespan)
   num <- timespan_num(timespan)
 
-  if (!timespan_has_unit(timespan)){
+  if (is.na(units)){
     out <- sequences(sizes, from = from, by = num)
   } else {
     is_special_case_days <- units %in% c("days", "weeks") &&
@@ -234,16 +236,18 @@ time_seq_v2 <- function(sizes, from, timespan,
     } else if (is_duration_unit(units)){
       out <- duration_seq_v2(sizes, from = from, units = units, num = num)
     } else {
-      out <- period_seq_v2(sizes, from = from, units = units, num = num,
-                           roll_month = roll_month, roll_dst = roll_dst)
+      out <- period_seq_v2(
+        sizes, from = from, units = units, num = num,
+        roll_month = roll_month, roll_dst = roll_dst
+      )
     }
   }
   out
 }
+
 # Duration sequence vectorised over from, to and num
 duration_seq_v <- function(from, to, units, num = 1){
-  time_by <- add_names(list(num), units)
-  seq_sizes <- time_seq_sizes(from, to, time_by)
+  seq_sizes <- time_seq_sizes(from, to, new_timespan(units, num))
   duration_seq_v2(seq_sizes, from = from, units = units, num = num)
 }
 # Alternate version of duration_seq_v with sizes arg instead of to
@@ -251,7 +255,7 @@ duration_seq_v <- function(from, to, units, num = 1){
 duration_seq_v2 <- function(sizes, from, units, num = 1){
   units <- rlang::arg_match0(units, .duration_units)
   from <- as_datetime2(from)
-  timespan <- timespan(units, num)
+  timespan <- new_timespan(units, num)
   num_seconds <- unit_to_seconds(timespan)
   time_seq <- cheapr::sequence_(sizes,
                                 from = unclass(from),
@@ -270,17 +274,11 @@ date_seq_v2 <- function(sizes, from, by = 1L){
   class(out) <- "Date"
   out
 }
-# (Semi) Vectorised period sequence
-# Duplicate from/to/by values are grouped together and
-# their sequences are repeated at the end.
+# Vectorised period sequence
 period_seq_v <- function(from, to, units, num = 1,
-                         roll_month = getOption("timeplyr.roll_month", "preday"),
-                         roll_dst = getOption("timeplyr.roll_dst", "NA")){
-  units <- rlang::arg_match0(units, .period_units)
-  if (length(to) == 0L){
-    return(from[0])
-  }
-  seq_sizes <- time_seq_sizes(from, to, timespan(units, num))
+                         roll_month = getOption("timeplyr.roll_month", "xlast"),
+                         roll_dst = getOption("timeplyr.roll_dst", c("NA", "xfirst"))){
+  seq_sizes <- time_seq_sizes(from, to, new_timespan(units, num))
   period_seq_v2(sizes = seq_sizes,
                 from = from, units = units,
                 num = num,
@@ -290,55 +288,27 @@ period_seq_v <- function(from, to, units, num = 1,
 # Alternate version of period_seq_v with sizes arg instead of to
 # If you have the sequence sizes pre-calculated, you can use this
 period_seq_v2 <- function(sizes, from, units, num = 1L,
-                          roll_month = getOption("timeplyr.roll_month", "preday"),
-                          roll_dst = getOption("timeplyr.roll_dst", "NA")){
+                          roll_month = getOption("timeplyr.roll_month", "xlast"),
+                          roll_dst = getOption("timeplyr.roll_dst", c("NA", "xfirst"))){
+
   units <- rlang::arg_match0(units, .period_units)
-  out_len <- sum(sizes)
-  unit <- plural_unit_to_single(units)
-  if (length(from) == 0L || length(sizes) == 0L){
-    return(from[0L])
+  n_seqs <- length(sizes)
+
+  # Vectorised time period addition
+
+  if (length(num) != 1){
+    num <- rep2(rep_len2(num, n_seqs), sizes)
   }
-  # Following timechange rules.
-  convert_back_to_date <- is_date(from) &&
-    unit %in% c("day", "week", "month", "year")
-  period_df <- cheapr::new_df(
-    from = from, num = num, sizes = sizes,
-    .recycle = TRUE
+  if (length(from) != 1){
+    from <- rep2(rep_len2(from, n_seqs), sizes)
+  }
+  if (is.integer(num)){
+    add <- sequence(sizes, from = 0L, by = 1L) * num
+  } else {
+    add <- cheapr::sequence_(sizes, from = 0, by = 1) * num
+  }
+  time_add(
+    from, new_timespan(units, add),
+    roll_month = roll_month, roll_dst = roll_dst
   )
-
-  # Does unique reduction result in a 2x reduction in data size?
-  reduce <- isTRUE((df_nrow(period_df) %/% collapse::fnunique(period_df)) >= 2L)
-
-  if (reduce){
-    period_groups <- collapse::group(period_df, starts = TRUE, group.sizes = TRUE)
-    group_starts <- attr(period_groups, "starts")
-    group_sizes <- attr(period_groups, "group.sizes")
-    n_groups <- attr(period_groups, "N.groups")
-    period_df <- cheapr::sset(period_df, group_starts)
-  }
-
-  from <- period_df[["from"]]
-  num <- period_df[["num"]]
-  sizes <- period_df[["sizes"]]
-
-  from <- as_datetime2(from)
-
-  period_add <- add_names(list(r_copy(num)), unit)
-  out <- vector("list", length(from))
-
-  for (i in seq_along(from)){
-    out[[i]] <- C_time_add(
-      from[i],
-      set_vec_elt(period_add, 0L, .subset2(num, i) * (seq_len(.subset2(sizes, i)) - 1L)), roll_month, roll_dst
-    )
-  }
-  if (reduce){
-    out <- out[period_groups]
-  }
-  out <- time_cast(unlist(out), from)
-
-  if (convert_back_to_date){
-    out <- lubridate::as_date(out)
-  }
-  out
 }

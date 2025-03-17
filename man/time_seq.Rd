@@ -8,12 +8,12 @@
 \title{Time based version of \code{base::seq()}}
 \usage{
 time_seq(
-  from,
-  to,
-  time_by,
+  from = NULL,
+  to = NULL,
+  time_by = NULL,
   length.out = NULL,
-  roll_month = getOption("timeplyr.roll_month", "preday"),
-  roll_dst = getOption("timeplyr.roll_dst", "NA")
+  roll_month = getOption("timeplyr.roll_month", "xlast"),
+  roll_dst = getOption("timeplyr.roll_dst", c("NA", "xfirst"))
 )
 
 time_seq_sizes(from, to, timespan)
@@ -22,16 +22,16 @@ time_seq_v(
   from,
   to,
   timespan,
-  roll_month = getOption("timeplyr.roll_month", "preday"),
-  roll_dst = getOption("timeplyr.roll_dst", "NA")
+  roll_month = getOption("timeplyr.roll_month", "xlast"),
+  roll_dst = getOption("timeplyr.roll_dst", c("NA", "xfirst"))
 )
 
 time_seq_v2(
   sizes,
   from,
   timespan,
-  roll_month = getOption("timeplyr.roll_month", "preday"),
-  roll_dst = getOption("timeplyr.roll_dst", "NA")
+  roll_month = getOption("timeplyr.roll_month", "xlast"),
+  roll_dst = getOption("timeplyr.roll_dst", c("NA", "xfirst"))
 )
 }
 \arguments{
@@ -90,7 +90,7 @@ library(lubridate)
 \dontshow{
 .n_dt_threads <- data.table::getDTthreads()
 .n_collapse_threads <- collapse::get_collapse()$nthreads
-data.table::setDTthreads(threads = 2L)
+data.table::setDTthreads(threads = 1L)
 collapse::set_collapse(nthreads = 1L)
 }
 # Dates
@@ -143,7 +143,7 @@ time_seq(leap, to = end, time = "year",
 time_seq(leap, to = end, time = "year",
          roll_month = "postday")
 time_seq(leap, to = end, time = "year",
-         roll_month = getOption("timeplyr.roll_month", "preday"))
+         roll_month = getOption("timeplyr.roll_month", "xlast"))
 \dontshow{
 data.table::setDTthreads(threads = .n_dt_threads)
 collapse::set_collapse(nthreads = .n_collapse_threads)

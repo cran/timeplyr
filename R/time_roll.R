@@ -74,7 +74,7 @@
 #' \dontshow{
 #' .n_dt_threads <- data.table::getDTthreads()
 #' .n_collapse_threads <- collapse::get_collapse()$nthreads
-#' data.table::setDTthreads(threads = 2L)
+#' data.table::setDTthreads(threads = 1L)
 #' collapse::set_collapse(nthreads = 1L)
 #' }
 #' time <- time_seq(today(), today() + weeks(3), "3 days")
@@ -662,7 +662,7 @@ time_roll_apply <- function(x, window = timespan(Inf), fun,
 #                           close_left_boundary = FALSE,
 #                           na.rm = TRUE,
 #                           time_type = getOption("timeplyr.time_type", "auto"),
-#                           roll_month = getOption("timeplyr.roll_month", "preday"), roll_dst = getOption("timeplyr.roll_dst", "NA"),
+#                           roll_month = getOption("timeplyr.roll_month", "xlast"), roll_dst = getOption("timeplyr.roll_dst", c("NA", "xfirst")),
 #                           ...){
 #   check_is_time_or_num(time)
 #   check_time_not_missing(time)

@@ -44,7 +44,7 @@
 #' \dontshow{
 #' .n_dt_threads <- data.table::getDTthreads()
 #' .n_collapse_threads <- collapse::get_collapse()$nthreads
-#' data.table::setDTthreads(threads = 2L)
+#' data.table::setDTthreads(threads = 1L)
 #' collapse::set_collapse(nthreads = 1L)
 #' }
 #' # Weekly sequence, with 2 gaps in between
@@ -97,7 +97,7 @@ time_seq_id <- function(x, timespan = granularity(x),
     dt[, ("over") :=
          lapply(
            .SD, function(x)
-             roll_time_threshold(x, threshold = threshold, switch_on_boundary = switch_on_boundary)
+             cpp_roll_time_threshold(x, threshold = threshold, switch_on_boundary = switch_on_boundary)
          ),
        by = group_id_col,
        .SDcols = "x"]

@@ -24,6 +24,25 @@ time_diff <- function(x, y, timespan = 1L){
   units <- timespan_unit(span)
   num <- timespan_num(span)
 
+  # Coerce x/y to compatible time objects
+  set_time_cast(y, x)
+
+  if (is.na(units)){
+    strip_attrs(divide(unclass(y) - unclass(x), num))
+  } else if (is_duration_unit(units)){
+    x <- as_datetime2(x)
+    y <- as_datetime2(y)
+    strip_attrs((unclass(y) - unclass(x)) / unit_to_seconds(span))
+  } else {
+    period_diff(x, y, span)
+  }
+
+}
+time_diff_original <- function(x, y, timespan = 1L){
+  span <- timespan(timespan)
+  units <- timespan_unit(span)
+  num <- timespan_num(span)
+
   if (units %in% c("days", "weeks") &&
       is_date(x) &&
       is_date(y) &&
@@ -57,8 +76,9 @@ time_diff <- function(x, y, timespan = 1L){
 
       span <- new_timespan(units, abs(num))
       out <- sign(num) * divide_interval_by_period(x, y, span)
-      out[which(num == 0 & x > y)] <- -Inf
-      out[which(num == 0 & x < y)] <- Inf
+      zero <- num == 0
+      out[which(zero & x > y)] <- -Inf
+      out[which(zero & x < y)] <- Inf
       # Expand them back to original length
       if (distinct_pairs){
         out <- out[interval_groups]
