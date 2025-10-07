@@ -241,6 +241,14 @@ timespan_abbr <- function(x, short = FALSE){
 
 }
 
+is_duration_timespan <- function(x){
+  isTRUE(
+    is_duration_unit(
+      timespan_unit(x)
+    )
+  )
+}
+
 #' @export
 `[.timespan` <- function(x, ...){
   new_timespan(timespan_unit(x), NextMethod("["))
@@ -267,7 +275,7 @@ c.timespan <- function(..., recursive = FALSE, use.names = TRUE){
     }
     dots[[i]] <- timespan_num(dot)
   }
-  out <- do.call(c, dots, envir = parent.frame())
+  out <- cheapr::cheapr_c(.args = dots)
   new_timespan(span_unit, out)
 }
 #' @export

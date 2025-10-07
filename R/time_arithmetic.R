@@ -117,6 +117,8 @@ period_add.Date <- function(x, add, roll_month = getOption("timeplyr.roll_month"
 #' @param x Time vector. \cr
 #' E.g. a `Date`, `POSIXt`, `numeric` or any time-based vector.
 #' @param timespan [timespan].
+#' @param n `[numeric(1)]` - Number of timespans. This is mostly sugar as
+#' this can easily be specified by `timespan()`.
 #' @param roll_month See `?timechange::time_add`. Additional choices
 #' include `xlast` (default) and `xfirst`. These work conceptually similar to
 #' skipped DST intervals.
@@ -137,45 +139,34 @@ period_add.Date <- function(x, add, roll_month = getOption("timeplyr.roll_month"
 #' A date, date-time, or other time-based vector.
 #'
 #' @export
-time_add <- function(x, timespan,
+time_add <- function(x, timespan, n = 1L,
                      roll_month = getOption("timeplyr.roll_month", "xlast"),
                      roll_dst = getOption("timeplyr.roll_dst", c("NA", "xfirst"))){
 
-  span <- timespan(timespan)
-  num <- timespan_num(span)
-  unit <- timespan_unit(span)
+  span <- timespan(timespan) * n
 
   if (!is.character(roll_month)){
-    if (is.numeric(roll_month)){
-      cli::cli_abort("
-      A {.cls numeric} vector has been supplied
-      to {.arg roll_month}, perhaps you meant
-      `timespan({unit}, {deparse1(substitute(roll_month))})`}")
-    } else {
-      cli::cli_abort("{.arg roll_month} must be a length 1 character vector")
-    }
+    cli::cli_abort("{.arg roll_month} must be a length 1 character vector")
   }
   if (!is.character(roll_dst)){
     cli::cli_abort("{.arg roll_dst} must be a length 1 or length 2 character vector")
   }
 
-  if (is.na(unit)){
-    x + num
-  } else {
+  if (!timespan_has_unit(span)){
+    x + timespan_num(span)
+  } else if (is_duration_timespan(span)){
     # If timespan is less than a day
-    if (is_duration_unit(unit)){
-      as_datetime2(x) + unit_to_seconds(span)
-    } else {
-      period_add(x, span, roll_month = roll_month, roll_dst = roll_dst)
-    }
+    as_datetime2(x) + unit_to_seconds(span)
+  } else {
+    period_add(x, span, roll_month = roll_month, roll_dst = roll_dst)
   }
 }
 #' @rdname time_add
 #' @export
-time_subtract <- function(x, timespan,
+time_subtract <- function(x, timespan, n = 1L,
                           roll_month = getOption("timeplyr.roll_month", "xlast"),
                           roll_dst = getOption("timeplyr.roll_dst", c("NA", "xfirst"))){
-  time_add(x, -timespan(timespan), roll_month = roll_month, roll_dst = roll_dst)
+  time_add(x, -timespan(timespan), n = n, roll_month = roll_month, roll_dst = roll_dst)
 }
 #' @rdname time_add
 #' @export
@@ -214,7 +205,7 @@ time_ceiling <- function(x, timespan,
   if (is.na(unit)){
     out <- ceiling(x / num) * num
     if (change_on_boundary){
-      change <- cheapr::which_(out == x)
+      change <- which(out == x)
       out[change] <- (out + num)[change]
     }
     out
@@ -231,6 +222,21 @@ time_ceiling <- function(x, timespan,
       change_on_boundary = change_on_boundary
     )
   }
+}
+
+#' @rdname time_add
+#' @export
+time_round <- function(x, timespan, week_start = getOption("lubridate.week.start", 1)){
+
+  span <- timespan(timespan)
+
+  up <- time_ceiling(x, span, week_start = week_start)
+  down <- time_floor(x, span, week_start = week_start)
+
+  d1 <- time_diff(x, up, span)
+  d2 <- time_diff(down, x, span)
+
+  cheapr::cheapr_if_else(d1 < d2, up, down)
 }
 
 # Extract the "clock-time" as the number of seconds of the day since midnight
@@ -299,11 +305,11 @@ diff_months.Date <- function(x, y, n = 1L, fractional = FALSE, ...){
       x, (months_add + cheapr::cheapr_if_else(l2r, n, -n)),
       roll_month = 3L
     )
-    fraction <- strip_attrs(
+    fraction <- cheapr::attrs_clear(
       (unclass(y) - unclass(small_int_start)) /
         abs(unclass(big_int_end) - unclass(small_int_start))
     )
-    fraction[cheapr::which_(x == y)] <- 0
+    fraction[which(x == y)] <- 0
     if (!all_val(fraction, 0)){
       out <- out + fraction
     }
@@ -356,7 +362,7 @@ diff_months.POSIXt <- function(x, y, n = 1L, fractional = FALSE, ...){
     }
 
     if (length(n) != 1){
-      n <- rep_len2(n, length(out))
+      n <- cheapr::cheapr_rep_len(n, length(out))
     }
     big_int_end <- cheapr::cheapr_if_else(
       l2r,
@@ -369,11 +375,11 @@ diff_months.POSIXt <- function(x, y, n = 1L, fractional = FALSE, ...){
         "preday", c("NA", "xfirst")
       )
     )
-    fraction <- strip_attrs(
+    fraction <- cheapr::attrs_clear(
       (unclass(y) - unclass(small_int_start)) /
         abs(unclass(big_int_end) - unclass(small_int_start))
     )
-    fraction[cheapr::which_(x == y)] <- 0
+    fraction[which(x == y)] <- 0
 
     if (!all_val(fraction, 0)){
       out <- out + fraction
@@ -445,10 +451,10 @@ diff_days.POSIXt <- function(x, y, n = 1L, fractional = FALSE, ...){
     }
 
     big_int_end <- time_add(x, temp + cheapr::cheapr_if_else(l2r, n, -n))
-    fraction <- strip_attrs(
+    fraction <- cheapr::attrs_clear(
       (unclass(y) - unclass(small_int_start)) / abs(unclass(big_int_end) - unclass(small_int_start))
     )
-    fraction[cheapr::which_(x == y)] <- 0
+    fraction[which(x == y)] <- 0
     if (!all_val(fraction, 0)){
       out <- out + fraction
     }

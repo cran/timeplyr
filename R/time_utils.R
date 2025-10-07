@@ -123,32 +123,6 @@ unit_to_seconds <- function(x){
 }
 
 # Calculate size of period unit to expand from and to for specified length
-# period_by_calc2 <- function(from, to, length){
-#   quo <- (length - 1)
-#
-#   # This returns `0` when `length == 1`
-#   quo[cheapr::val_find(quo, 0)] <- Inf
-#
-#   # First try and see if we can create a sequence in
-#   # whole months, if not then whole days,
-#   # if not then it must be in seconds
-#
-#   month_delta <- time_diff(from, to, new_timespan("months")) / quo
-#
-#   if (is_whole_number(month_delta)){
-#     out <- new_timespan("months", month_delta)
-#   } else {
-#     day_delta <- time_diff(from, to, new_timespan("days")) / quo
-#     if (is_whole_number(day_delta)){
-#       out <- new_timespan("days", day_delta)
-#     } else {
-#       out <- time_diff(from, to, new_timespan("seconds")) / quo
-#       out <- seconds_to_higher_timespan(new_timespan("seconds", out))
-#     }
-#   }
-#   out
-# }
-
 period_by_calc <- function(from, to, length){
 
   quo <- (length - 1L)
@@ -162,13 +136,13 @@ period_by_calc <- function(from, to, length){
   # and if it equals `to` then the ans can be returned
 
   month_delta <- diff_months(from, to, n = quo, fractional = FALSE)
-  up <- from %>%
+  up <- from |>
     time_add(new_timespan("months", month_delta * fct), roll_month = "xlast")
   if (identical(up, to)){
     out <- new_timespan("months", month_delta)
   } else {
     day_delta <- diff_days(from, to, n = quo, fractional = FALSE)
-    up <- from %>%
+    up <- from |>
       time_add(new_timespan("days", day_delta * fct))
     if (identical(up, to)){
       out <- new_timespan("days", day_delta)
@@ -236,9 +210,6 @@ time_cast <- function(x, template){
 # Coerce pair of time based vectors to the most informative
 # class between them
 set_time_cast <- function(x, y){
-  if (identical(parent.frame(n = 1), globalenv())){
-    stop("Users cannot use set_time_cast from the global environment")
-  }
   if (!identical(class(x), class(y))){
     x_nm <- deparse2(substitute(x))
     y_nm <- deparse2(substitute(y))
@@ -306,9 +277,9 @@ as_yearqtr <- function(x){
 # Internal helper to process from/to args
 get_from_to <- function(data, ..., time, from = NULL, to = NULL,
                         .by = NULL){
-  from_var <- col_select_names(data, .cols = from)
-  to_var <- col_select_names(data, .cols = to)
-  time_var <- col_select_names(data, .cols = time)
+  from_var <- tidy_select_names(data, .cols = from)
+  to_var <- tidy_select_names(data, .cols = to)
+  time_var <- tidy_select_names(data, .cols = time)
   dot_vars <- tidy_select_names(data, ...)
   by_vars <- tidy_select_names(data, {{ .by }})
   if (length(from_var) == 0L || length(to_var) == 0L){
@@ -389,7 +360,7 @@ adj_dur_est <- function (est, start, end, width){
   }
   frac <- ( unclass(end) - unclass(low_date) ) /
     ( unclass(up_date) - unclass(low_date) )
-  frac <- strip_attrs(frac)
+  frac <- cheapr::attrs_clear(frac)
   frac[which(low_date == up_date)] <- 0
   est + frac
 }
@@ -401,7 +372,7 @@ divide_interval_by_period <- function(start, end, width){
   }
   start <- as_datetime2(start)
   end <- as_datetime2(end)
-  estimate <- strip_attrs((unclass(end) - unclass(start)) / unit_to_seconds(width))
+  estimate <- cheapr::attrs_clear((unclass(end) - unclass(start)) / unit_to_seconds(width))
   timespans <- cheapr::recycle(start = start, end = end, width = width)
   start <- timespans[[1L]]
   end <- timespans[[2L]]
@@ -411,7 +382,7 @@ divide_interval_by_period <- function(start, end, width){
     adj_dur_est(estimate, start, end, width)
     # adjust_duration_estimate(as.double(estimate), start, end, as.double(timespan_num(width)), timespan_unit(width))
   } else {
-    not_nas <- which_not_na(estimate)
+    not_nas <- cheapr::na_find(estimate, invert = TRUE)
     start <- start[not_nas]
     end <- end[not_nas]
     width <- width[not_nas]
@@ -442,7 +413,7 @@ int_to_per <- function(start, end){
   set_recycle_args(start, end)
   start <- as_datetime2(start)
   end <- time_cast(end, start)
-  duration <- strip_attrs(end) - strip_attrs(start)
+  duration <- cheapr::attrs_clear(end) - cheapr::attrs_clear(start)
   start <- unclass(as.POSIXlt(start))
   end <- unclass(as.POSIXlt(end))
   negs <- duration < 0

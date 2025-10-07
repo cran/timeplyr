@@ -28,11 +28,11 @@ time_diff <- function(x, y, timespan = 1L){
   set_time_cast(y, x)
 
   if (is.na(units)){
-    strip_attrs(divide(unclass(y) - unclass(x), num))
+    cheapr::attrs_clear(divide(unclass(y) - unclass(x), num))
   } else if (is_duration_unit(units)){
     x <- as_datetime2(x)
     y <- as_datetime2(y)
-    strip_attrs((unclass(y) - unclass(x)) / unit_to_seconds(span))
+    cheapr::attrs_clear((unclass(y) - unclass(x)) / unit_to_seconds(span))
   } else {
     period_diff(x, y, span)
   }
@@ -68,7 +68,7 @@ time_diff_original <- function(x, y, timespan = 1L){
       # If distinct pairs results in a 2x reduction in data size, then we do that
       distinct_pairs <- isTRUE((df_nrow(interval_tbl) %/% n_groups) >= 2L)
       if ( distinct_pairs ){
-        interval_tbl <- df_row_slice(interval_tbl, starts)
+        interval_tbl <- cheapr::sset_row(interval_tbl, starts)
       }
       x <- interval_tbl$x
       y <- interval_tbl$y
@@ -90,5 +90,33 @@ time_diff_original <- function(x, y, timespan = 1L){
       out <- (y - x) / by
     }
   }
-  strip_attrs(out)
+  cheapr::attrs_clear(out)
 }
+
+
+# .time_diff <- function(x, y, span){
+#
+#   units <- timespan_unit(span)
+#   num <- timespan_num(span)
+#
+#   if (is.na(units)){
+#     cheapr::attrs_clear(divide(unclass(y) - unclass(x), num))
+#   } else if (is_duration_unit(units)){
+#     x <- as_datetime2(x)
+#     y <- as_datetime2(y)
+#     cheapr::attrs_clear((unclass(y) - unclass(x)) / unit_to_seconds(span))
+#   } else {
+#     period_diff(x, y, span)
+#   }
+# }
+# time_diff <- function(x, y, timespan = 1L){
+#
+#   set_time_cast(y, x)
+#
+#   span <- timespan(timespan)
+#
+#   if (!timespan_has_unit(span)){
+#     span <- resolution(x) * span
+#   }
+#   new_timespan(timespan_unit(span), .time_diff(x, y, span))
+# }

@@ -8,9 +8,12 @@ dots_length <- function(...){
   nargs()
 }
 
-dot_nms <- get_from_package("expr_names", "cheapr")
-deparse2 <- get_from_package("deparse2", "cheapr")
-r_copy <- get_from_package("r_copy", "cheapr")
+dot_nms <- function(...){
+  vapply(as.list(substitute(alist(...)))[-1L], deparse2, "", USE.NAMES = FALSE)
+}
+deparse2 <- function(expr, collapse = " ", width.cutoff = 500L, nlines = 10L, ...){
+  paste(deparse(expr, width.cutoff, nlines = nlines, ...), collapse = collapse)
+}
 cpp_loc_set_replace <- get_from_package("cpp_loc_set_replace", "cheapr")
 
 set_recycle_args <- function(..., length = NULL, use.names = TRUE){
@@ -87,6 +90,10 @@ fpluck <- function(x, .cols = NULL, .default = NULL){
   .subset2(x, icol)
 }
 
+floor_nearest_n <- function(x, n){
+  floor(x / n) * n
+}
+
 # Round up to nearest n
 ceiling_nearest_n <- function(x, n){
   ceiling(x / n) * n
@@ -147,25 +154,8 @@ divide <- function(a, b){
 # Initialise a single NA value of correct type
 na_init <- function(x, size = 1L){
   rep(x[NA_integer_], size)
-  # x[rep_len(NA_integer_, size)]
-  # rep_len(x[NA_integer_], size)
 }
-strip_attrs <- function(x, set = FALSE){
-  if (set){
-    set_rm_attributes(x)
-  } else {
-    attributes(x) <- NULL
-    x
-  }
-}
-strip_attr <- function(x, which, set = FALSE){
-  if (set){
-    set_rm_attr(x, which)
-  } else {
-    attr(x, which) <- NULL
-    x
-  }
-}
+
 is_integerable <- function(x){
   abs(x) <= .Machine$integer.max
 }
@@ -175,31 +165,12 @@ all_integerable <- function(x, shift = 0){
     na.rm = TRUE
   )
 }
-add_attr <- function(x, which, value, set = FALSE){
-  if (set){
-    set_add_attr(x, which, value)
-  } else {
-    attr(x, which) <- value
-    x
-  }
-}
-add_attrs <- function(x, value, set = FALSE){
-  if (set){
-    set_add_attributes(x, value, add = FALSE)
-  } else {
-    attributes(x) <- value
-    x
-  }
-}
+
 add_names <- function(x, value){
   names(x) <- value
   x
 }
-check_is_list <- function(x){
-  if (!is.list(x)){
-    stop(paste(deparse2(substitute(x)), "must be a list"))
-  }
-}
+
 check_length <- function(x, size){
   if (length(x) != size){
     cli::cli_abort("{.arg x} must be of length {size}")
@@ -239,12 +210,6 @@ trunc2 <- function(x){
 round2 <- function(x, digits = 0){
   if (is.integer(x) && all(digits >= 0)) x else round(x, digits)
 }
-floor2 <- function(x){
-  if (is.integer(x)) x else floor(x)
-}
-ceiling2 <- function(x){
-  if (is.integer(x)) x else ceiling(x)
-}
 
 # Cheapr functions --------------------------------------------------------
 
@@ -252,24 +217,58 @@ gcd_diff <- function(x){
   cheapr::gcd(diff_(x), na_rm = TRUE)
 }
 which <- cheapr::which_
-which_na <- get_from_package("which_na", "cheapr")
-which_not_na <- get_from_package("which_not_na", "cheapr")
-which_in <- get_from_package("which_in", "cheapr")
-which_not_in <- get_from_package("which_not_in", "cheapr")
+
+which_in <- function(x, table){
+  cheapr::na_find(
+    collapse::fmatch(x, table, overid = 2L, nomatch = NA_integer_),
+    invert = TRUE
+  )
+}
+which_not_in <- function(x, table){
+  cheapr::na_find(
+    collapse::fmatch(x, table, overid = 2L, nomatch = NA_integer_)
+  )
+}
 `%in_%` <- cheapr::`%in_%`
 `%!in_%` <- cheapr::`%!in_%`
 
 sequences <- function(size, from = 1L, by = 1L, add_id = FALSE){
   time_cast(cheapr::sequence_(size, from, by, add_id), from)
 }
-inline_hist <- get_from_package("inline_hist", "cheapr")
+spark_bar <- function(x){
+  bars <- intToUtf8(c(9601L, 9602L, 9603L, 9605L, 9606L, 9607L),
+                    multiple = TRUE)
+  bar_codes <- cheapr::bin(
+    x, seq.int(0, to = 1, length.out = length(bars) + 1L),
+    left_closed = TRUE, include_oob = TRUE, include_endpoint = TRUE
+  )
+  bar_codes[bar_codes == 0L] <- NA_integer_
+  out <- bars[bar_codes]
+  paste0(out, collapse = "")
+}
+inline_hist <- function(x, n_bins = 5L){
+  if (length(x) < 1L) {
+    return("")
+  }
+  if (is.infinite(max(abs(collapse::frange(x, na.rm = TRUE))))) {
+    x[cheapr::val_find(is.infinite(x), TRUE)] <- NA
+  }
+  n_nas <- cheapr::na_count(x)
+  all_na <- n_nas == length(x)
+  if (all_na) {
+    return("")
+  }
+  if (cheapr::val_count(x, 0) == (length(x) - n_nas)) {
+    x <- x + 1
+  }
+  hist_dt <- tabulate(
+    cut(x, n_bins, right = TRUE, labels = FALSE),
+    nbins = n_bins
+  )
+  hist_dt <- hist_dt / max(hist_dt)
+  spark_bar(hist_dt)
+}
 window_sequence <- cheapr::window_sequence
-sset <- cheapr::sset
-set_add_attr <- get_from_package("cpp_set_add_attr", "cheapr")
-set_add_attributes <- get_from_package("cpp_set_add_attributes", "cheapr")
-set_rm_attr <- get_from_package("cpp_set_rm_attr", "cheapr")
-set_rm_attributes <- get_from_package("cpp_set_rm_attributes", "cheapr")
-
 arithmetic_mean <- function(x, weights = NULL, na.rm = TRUE, ...){
   collapse::fmean(x, w = weights, na.rm = na.rm, ...)
 }
@@ -302,13 +301,47 @@ unique_col_name <- function(data, col){
   col
 }
 
-mutate_summary_grouped <- get_from_package("mutate_summary_grouped", "fastplyr")
-mutate_summary_ungrouped <- get_from_package("mutate_summary_ungrouped", "fastplyr")
-tidy_group_info <- get_from_package("tidy_group_info", "fastplyr")
-col_select_names <- get_from_package("col_select_names", "fastplyr")
 tidy_select_names <- get_from_package("tidy_select_names", "fastplyr")
-tidy_select_pos <- get_from_package("tidy_select_pos", "fastplyr")
-across_col_names <- get_from_package("across_col_names", "fastplyr")
+
+across_col_names <- function (.cols = NULL, .fns = NULL, .names = NULL){
+  fns_null <- is.null(.fns)
+  nms_null <- is.null(.names)
+
+  if (fns_null && !nms_null){
+    .fns <- ""
+    fns_null <- FALSE
+  }
+
+  n_fns <- length(.fns)
+  n_cols <- length(.cols)
+
+
+  if (fns_null && nms_null){
+    out <- as.character(.cols)
+  } else if (nms_null && n_fns == 1L) {
+    out <- .cols
+  } else if (nms_null && n_cols == 1L) {
+    out <- .fns
+    out <- cheapr::name_repair(out, empty_sep = paste0(.cols, "_"), dup_sep = "_")
+  } else {
+    .fns <- cheapr::name_repair(.fns %||% "", empty_sep = "", dup_sep = "")
+    out <- character(n_cols * n_fns)
+    init <- 0L
+    if (nms_null) {
+      for (.col in .cols) {
+        out[seq_len(n_fns) + init] <- paste0(.col, "_", .fns)
+        init <- init + n_fns
+      }
+    } else {
+      .fn <- .fns
+      for (.col in .cols) {
+        out[seq_len(n_fns) + init] <- stringr::str_glue(.names)
+        init <- init + n_fns
+      }
+    }
+  }
+  out
+}
 
 old_group_id <- function(data, ...,
                          order = TRUE,
@@ -327,21 +360,6 @@ old_group_id <- function(data, ...,
   )[[".internal.temp.group.id"]]
 }
 
-rep_len2 <- function(x, length.out){
-  if (length(x) == length.out){
-    x
-  } else {
-    rep_len(x, length.out)
-  }
-}
-
-rep2 <- function(x, times){
-  if (length(times) == 1 && times == 1){
-    x
-  } else {
-    rep(x, times)
-  }
-}
 # if else as a function for ease-of-use
 scalar_if_else <- function(condition, true, false) if (condition) true else false
 

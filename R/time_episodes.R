@@ -124,23 +124,23 @@
 #' # Say we want to flag origin-destination pairs
 #' # that haven't seen departures or arrivals for a week
 #'
-#' events <- flights %>%
-#'   mutate(date = as_date(time_hour)) %>%
-#'   group_by(origin, dest) %>%
+#' events <- flights |>
+#'   mutate(date = as_date(time_hour)) |>
+#'   group_by(origin, dest) |>
 #'   time_episodes(date, "week", window = 1)
 #'
 #' events
 #'
-#' episodes <- events %>%
+#' episodes <- events |>
 #'   filter(ep_id_new > 1)
 #' nrow(fastplyr::f_distinct(episodes, origin, dest)) # 55 origin-destinations
 #'
 #' # As expected summer months saw the least number of
 #' # dry-periods
-#' episodes %>%
-#'   ungroup() %>%
-#'   time_by(ep_start, "week", .name = "ep_start") %>%
-#'   count(ep_start = interval_start(ep_start)) %>%
+#' episodes |>
+#'   ungroup() |>
+#'   time_by(ep_start, "week", .name = "ep_start") |>
+#'   count(ep_start = interval_start(ep_start)) |>
 #'   ggplot(aes(x = ep_start, y = n)) +
 #'   geom_bar(stat = "identity")
 #' \dontshow{
@@ -171,7 +171,7 @@ time_episodes <- function(data, time, time_by = NULL,
   if (length(time_col) == 0){
     stop("Please supply date or datetime for episode calculation")
   }
-  temp <- df_ungroup(data)
+  temp <- fastplyr::f_ungroup(data)
   # Data names after data-masking
   data_nms <- names(temp)
   if (is.null(event)){
@@ -190,7 +190,7 @@ time_episodes <- function(data, time, time_by = NULL,
     }
     # Add event identifier col
     event_id_nm <- unique_col_name(temp, ".event.id")
-    temp <- df_add_cols(
+    temp <- cheapr::df_modify(
       temp, add_names(list(
         cheapr::cheapr_if_else(
           temp[[event_col]] %in_% event[[1L]], 1L, 0L
@@ -210,7 +210,7 @@ time_episodes <- function(data, time, time_by = NULL,
   time_by <- time_by_get(temp[[time_col]], time_by = time_by)
   # Create group ID variable
   grp_nm <- unique_col_name(data_nms, ".group")
-  temp <- df_add_cols(temp, add_names(
+  temp <- cheapr::df_modify(temp, add_names(
     list(
       old_group_id(data, as_qg = TRUE, order = TRUE)
     ), grp_nm
@@ -219,10 +219,10 @@ time_episodes <- function(data, time, time_by = NULL,
   group_sizes <- attr(temp[[grp_nm]], "group.sizes")
 
   # Remove qG class
-  strip_attrs(temp[[grp_nm]], set = TRUE)
+  cheapr::attrs_clear(temp[[grp_nm]], .set = TRUE)
   # Group by group vars + time
   grp_nm2 <- unique_col_name(temp, ".group")
-  temp <- df_add_cols(temp, add_names(list(
+  temp <- cheapr::df_modify(temp, add_names(list(
     old_group_id(temp, .cols = c(grp_nm, time_col), order = TRUE)
   ), grp_nm2))
   data_is_sorted <- is_sorted(temp[[grp_nm2]])
@@ -291,7 +291,7 @@ time_episodes <- function(data, time, time_by = NULL,
     # Set the column order
     out <- fastplyr::f_select(out, .cols = out_nms)
   }
-  out <- reconstruct(data, out)
+  out <- cheapr::rebuild(out, data)
   threshold <- time_by
   threshold[[1L]] <- time_by_num(time_by) * window
   out <- structure(out, time = time_col, time_by = time_by, threshold = threshold)
@@ -307,10 +307,10 @@ tbl_sum.episodes_tbl_df <- function(x, ...){
   elapsed_header <- character()
   threshold_header <- character()
   # Groups
-  group_vars <- group_vars(x)
+  group_vars <- fastplyr::f_group_vars(x)
   GRPS <- df_to_GRP(x, return.groups = FALSE)
   if (length(group_vars) > 0){
-    groups <- group_data(x)
+    groups <- fastplyr::f_group_data(x)
     groups_header <- c("Groups" =
                          paste0(paste(group_vars, collapse = ", "),
                                 " [",
@@ -397,7 +397,7 @@ calc_episodes <- function(data,
   time_num <- time_by_num(time_by)
   time_unit <- time_by_unit(time_by)
   # Time elapsed
-  data <- df_add_cols(
+  data <- cheapr::df_modify(
     data, list(
       t_elapsed = time_elapsed(data[[time]],
                                time_by_list_as_timespan(time_by),
@@ -410,7 +410,7 @@ calc_episodes <- function(data,
   # Binary variable indicating if new episode or not
   # The first event is always a new episode
   # Events where t_elapsed >= window are new episodes
-  data <- df_add_cols(data, list(
+  data <- cheapr::df_modify(data, list(
     ep_id = time_seq_id(data[[time]],
                         time_by_list_as_timespan(time_by),
                         g = g,
@@ -421,16 +421,112 @@ calc_episodes <- function(data,
   ))
   g3 <- collapse::GRP(fastplyr::f_select(data, .cols = c(gid, "ep_id")))
   g3_starts <- GRP_starts(g3)
-  data <- df_add_cols(data, list(ep_id_new = 0L))
+  data <- cheapr::df_modify(data, list(ep_id_new = 0L))
   cpp_loc_set_replace(data[["ep_id_new"]], g3_starts, data[["ep_id"]][g3_starts])
   cpp_loc_set_replace(data[["ep_id_new"]], cheapr::na_find(data[["ep_id"]]), NA_integer_)
 
   # Add episode start dates
   # Get min episode dates for each subject + episode
-  data <- df_add_cols(data, list(
+  data <- cheapr::df_modify(data, list(
     ep_start = gfirst(data[[time]],
                       g = g3,
                       na.rm = FALSE)
   ))
   data
+}
+
+
+# time_episodes2 <- function(data, time, time_by = NULL,
+#                            window = 1,
+#                            roll_episode = TRUE,
+#                            switch_on_boundary = TRUE,
+#                            fill = 0,
+#                            .add = FALSE,
+#                            event = NULL,
+#                            .by = NULL){
+#   rlang::check_required(time)
+#   N <- df_nrow(data)
+#   check_length(window, 1)
+#   check_is_num(window)
+#   if (window < 0){
+#     cli::cli_abort("{.arg window} must be strictly greater or equal to 0")
+#   }
+#   data_nms <- names(data)
+#   time_quo <- enquo(time)
+#   new_data <- fastplyr::f_group_by(data, .by = {{ .by }}, .order = TRUE, .add = TRUE)
+#   group_vars <- get_groups(new_data)
+#   time_col <- tidy_select_names(new_data, !!time_quo)
+#   if (length(time_col) == 0){
+#     cli::cli_abort("Please supply time column for episode calculation")
+#   }
+#   if (is.null(event)){
+#     event_col <- character(0)
+#     event_id_nm <- character(0)
+#   } else {
+#     if (!isTRUE(is.list(event) &&
+#                 collapse::fncol(event) == 1L &&
+#                 length(names(event)) == 1L)){
+#       cli::cli_abort("{.arg event} must be named {.cls list} of length 1")
+#
+#     }
+#     event_col <- names(event)
+#     if (!event_col %in% data_nms){
+#       cli::cli_abort("Column {event_col} doesn't exist")
+#     }
+#     # Add event identifier col
+#     new_data <- cheapr::df_modify(
+#       new_data, list(
+#         .event.id = cheapr::cheapr_if_else(
+#           temp[[event_col]] %in_% event[[1L]], 1L, 0L
+#         )
+#       )
+#     )
+#     if (cheapr::na_count(temp[[event_col]]) != cheapr::na_count(temp[[time_col]])){
+#       cli::cli_warn(
+#         paste0("There is a mismatch of NAs between ",
+#                time_col, " and ",
+#                event_col, ", please check.")
+#       )
+#     }
+#   }
+#   time_by <- get_granularity(new_data[[time_col]], time_by)
+#
+#   groups <- attributes(new_data)[["GRP"]]
+#
+#   out <- new_data |>
+#     fastplyr::f_ungroup() |>
+#     fastplyr::f_mutate(
+#       t_elapsed = time_elapsed(
+#         .data[[time_col]],
+#         time_by, g = groups,
+#         rolling = roll_episode, fill = 0
+#       ),
+#
+#       ep_id = time_seq_id(
+#         .data[[time_col]], time_by, threshold = window,
+#         switch_on_boundary = switch_on_boundary
+#       )
+#     )
+#
+#   out <- cheapr::rebuild(out, data)
+#   threshold <- time_by
+#   threshold[[1L]] <- time_by_num(time_by) * window
+#   out <- structure(out, time = time_col, time_by = time_by, threshold = threshold)
+#   class(out) <- c("episodes_tbl_df", class(out))
+#   out
+# }
+
+
+#' @exportS3Method cheapr::rebuild
+rebuild.episodes_tbl_df <- function(x, template, ...){
+
+  class(template) <- cheapr::val_rm(class(template), "episodes_tbl_df")
+
+  out <- cheapr::rebuild(x, template, ...)
+
+
+  extra_attrs <- cheapr::list_drop_null(attributes(template)[c("time", "time_by", "threshold")])
+  attributes(out) <- c(attributes(out), extra_attrs)
+  class(out) <- c("episodes_tbl_df", class(out))
+  out
 }

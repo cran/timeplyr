@@ -53,7 +53,7 @@ calendar <- function(x, label = TRUE,
   wday <- cheapr::val_replace((time_info$wday - (as.integer(week_start) - 1L)) %% 7L, 0L, 7L)
   if (label){
     days <- c("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
-    days <- days[cheapr::val_replace((1:7 + (week_start)) %% 7L, 0L, 7L)]
+    days <- days[cheapr::val_replace( ( (1:7) + (week_start) ) %% 7L, 0L, 7L)]
 
     wday_l <- as.integer(wday)
     attr(wday_l, "levels") <- days
@@ -76,9 +76,24 @@ calendar <- function(x, label = TRUE,
     second <- NULL
   }
   out <- fastplyr::new_tbl(
-    !!name := x, year, quarter, month, month_l, week, day,
-    yday, isoyear, isoweek, isoday, epiyear, epiweek, wday, wday_l,
-    hour, minute, second
+    !!name := x,
+    year = year,
+    quarter = quarter,
+    month = month,
+    month_l = month_l,
+    week = week,
+    day = day,
+    yday = yday,
+    isoyear = isoyear,
+    isoweek = isoweek,
+    isoday = isoday,
+    epiyear = epiyear,
+    epiweek = epiweek,
+    wday = wday,
+    wday_l = wday_l,
+    hour = hour,
+    minute = minute,
+    second = second
   )
   out
 }
