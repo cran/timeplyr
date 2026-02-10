@@ -7,11 +7,11 @@
 #' You can learn more about the tidyverse,
 #' data.table and collapse using the links below
 #'
-#' \href{https://www.tidyverse.org/learn/}{tidyverse}
+#' \href{https://tidyverse.org/learn/}{tidyverse}
 #'
 #' \href{https://CRAN.R-project.org/package=data.table}{data.table}
 #'
-#' \href{https://sebkrantz.github.io/collapse/articles/collapse_intro.html}{collapse}
+#' \href{https://github.com/fastverse/collapse}{collapse}
 #'
 #' @importFrom cheapr sset
 #' @importFrom data.table :=

@@ -1,6 +1,6 @@
 Package: timeplyr
 Title: Fast Tidy Tools for Date and Date-Time Manipulation
-Version: 1.1.1
+Version: 1.1.2
 Authors@R: 
     person("Nick", "Christofides", , "nick.christofides.r@gmail.com", role = c("aut", "cre"),
            comment = c(ORCID = "0000-0002-9743-7342"))
@@ -22,9 +22,9 @@ Config/testthat/edition: 3
 Encoding: UTF-8
 RoxygenNote: 7.3.3
 NeedsCompilation: yes
-Packaged: 2025-10-07 08:29:01 UTC; Nmc5
+Packaged: 2026-02-10 07:32:49 UTC; Nmc5
 Author: Nick Christofides [aut, cre] (ORCID:
     <https://orcid.org/0000-0002-9743-7342>)
 Maintainer: Nick Christofides <nick.christofides.r@gmail.com>
 Repository: CRAN
-Date/Publication: 2025-10-07 08:50:02 UTC
+Date/Publication: 2026-02-10 07:50:02 UTC
